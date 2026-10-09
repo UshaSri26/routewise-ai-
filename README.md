@@ -105,8 +105,8 @@ Dominated routes are flagged to prevent suboptimal choices.
 ### 2. Installation
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/routewise-ai.git
-cd routewise-ai
+git clone https://github.com/UshaSri26/routewise-ai-.git
+cd aiqonn
 
 # Install dependencies
 pip install -r requirements.txt
