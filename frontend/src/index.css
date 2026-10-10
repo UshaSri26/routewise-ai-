@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #07111F;
+    color: #F1F5F9;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0A1626;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #22344A;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #21D4C2;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[#101F32] border border-[#22344A] rounded-xl p-5;
+  }
+
+  .card-elevated {
+    @apply bg-[#14263B] border border-[#22344A] rounded-xl p-5;
+  }
+
+  .btn-primary {
+    @apply bg-[#21D4C2] hover:bg-[#1bbfad] text-[#07111F] font-semibold px-6 py-2.5 rounded-lg transition-all duration-200 text-sm;
+  }
+
+  .btn-secondary {
+    @apply bg-[#14263B] hover:bg-[#1a3048] border border-[#22344A] hover:border-[#21D4C2] text-[#F1F5F9] font-medium px-4 py-2 rounded-lg transition-all duration-200 text-sm;
+  }
+
+  .badge-feasible {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#34D39920] text-[#34D399] border border-[#34D39930];
+  }
+
+  .badge-infeasible {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#FB718520] text-[#FB7185] border border-[#FB718530];
+  }
+
+  .badge-pareto {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#21D4C220] text-[#21D4C2] border border-[#21D4C230];
+  }
+
+  .label {
+    @apply text-xs font-medium text-[#93A4B8] uppercase tracking-wider;
+  }
+
+  .value {
+    @apply text-lg font-semibold text-[#F1F5F9];
+  }
+
+  .input-field {
+    @apply w-full bg-[#0A1626] border border-[#22344A] rounded-lg px-4 py-2.5 text-[#F1F5F9] text-sm
+           placeholder:text-[#4A5568] focus:outline-none focus:border-[#21D4C2] focus:ring-1 focus:ring-[#21D4C230]
+           transition-all duration-200;
+  }
+}
