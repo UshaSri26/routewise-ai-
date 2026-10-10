@@ -8,6 +8,8 @@ export interface Shipment {
 
 export interface RouteResult {
   route_id: string;
+  route_name?: string;
+  carrier?: string;
   hubs: string;
   mode: string;
   cost: number;
