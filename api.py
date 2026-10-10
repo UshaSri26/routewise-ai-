@@ -161,9 +161,8 @@ def optimize(req: OptimizeRequest):
 def custom_optimize(req: CustomOptimizeRequest):
     """Parse a natural-language prompt and run the optimizer."""
     try:
-        custom_df, weights, _msg = parse_and_generate_corridor(req.prompt, _df)
+        custom_df, weights, constraints, _msg = parse_and_generate_corridor(req.prompt, _df)
         weights.validate()
-        constraints = HardConstraints()
 
         result = RouteOptimizer.evaluate_shipment_routes(custom_df, weights, constraints)
         explanation = _explainer.generate_explanation(result)
@@ -173,6 +172,7 @@ def custom_optimize(req: CustomOptimizeRequest):
         if not custom_df.empty:
             payload["parsed_origin"] = str(custom_df["origin"].iloc[0]) if "origin" in custom_df.columns else ""
             payload["parsed_destination"] = str(custom_df["destination"].iloc[0]) if "destination" in custom_df.columns else ""
+        payload["corridor_note"] = _msg
         return payload
 
     except Exception as exc:
