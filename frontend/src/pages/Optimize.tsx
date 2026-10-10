@@ -25,14 +25,18 @@ export default function Optimize({ initialResult, initialShipment, onResult }: O
 
   useEffect(() => {
     getShipments().then((s) => {
-      setShipments(s);
+      let list = s;
+      if (initialShipment && !s.some((x) => x.shipment_id === initialShipment.shipment_id)) {
+        list = [initialShipment, ...s];
+      }
+      setShipments(list);
       if (initialShipment) {
         setSelectedId(initialShipment.shipment_id);
-      } else if (s.length > 0 && !selectedId) {
-        setSelectedId(s[0].shipment_id);
+      } else if (list.length > 0 && !selectedId) {
+        setSelectedId(list[0].shipment_id);
       }
     }).catch(() => {});
-  }, []);
+  }, [initialShipment]);
 
   useEffect(() => {
     if (initialResult) setResult(initialResult);

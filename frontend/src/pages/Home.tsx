@@ -32,7 +32,15 @@ export default function Home({ onResult, onNavigate }: HomeProps) {
     setError(null);
     try {
       const result = await customOptimize(prompt);
-      onResult(result);
+      const customShipment: Shipment | undefined =
+        result.parsed_origin && result.parsed_destination
+          ? {
+              shipment_id: result.recommended?.route_id.split('-R')[0] || 'CUSTOM-01',
+              origin: result.parsed_origin,
+              destination: result.parsed_destination,
+            }
+          : undefined;
+      onResult(result, customShipment);
     } catch (err: any) {
       setError(err.message ?? 'Something went wrong. Is the API running?');
     } finally {
