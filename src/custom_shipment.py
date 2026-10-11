@@ -7,12 +7,13 @@ accurate commercial logistics speeds (road ~60-70 km/h, rail ~50 km/h, air),
 and practical localized freight costing in Indian Rupees (INR) and USD equivalent.
 """
 
+import hashlib
 import math
 import re
 from typing import Tuple, Optional, Dict
-import numpy as np
 import pandas as pd
 from src.optimizer import WeightsConfig, HardConstraints
+from src.freight_costs import INR_PER_USD, india_domestic_quotes, international_lcl_quotes
 
 # Real coordinates for common Indian & Global logistics hubs
 KNOWN_CITIES: Dict[str, Tuple[float, float]] = {
@@ -62,6 +63,16 @@ KNOWN_CITIES: Dict[str, Tuple[float, float]] = {
     "sydney": (33.8688, 151.2093),
 }
 
+GLOBAL_HUB_KEYS = {
+    "shanghai", "rotterdam", "singapore", "dubai", "los angeles", "new york",
+    "hamburg", "london", "tokyo", "sydney",
+}
+
+INDIA_CITY_KEYS = {
+    k for k in KNOWN_CITIES
+    if k not in GLOBAL_HUB_KEYS
+}
+
 CITY_ALIASES: Dict[str, str] = {
     "hyd": "Hyderabad",
     "hyderabad": "Hyderabad",
@@ -85,6 +96,8 @@ CITY_ALIASES: Dict[str, str] = {
     "delhi": "Delhi",
     "ccu": "Kolkata",
     "kolkata": "Kolkata",
+    "pune": "Pune",
+    "ahmedabad": "Ahmedabad",
 }
 
 
@@ -111,18 +124,21 @@ def estimate_distance_km(orig: str, dest: str) -> float:
         straight = haversine_km(KNOWN_CITIES[o_key], KNOWN_CITIES[d_key])
         return max(30.0, round(straight * 1.15, 1))
 
-    # Fallback deterministic distance
-    seed = abs(hash(f"{o_key}-{d_key}")) % 800
+    # Stable fallback (avoid PYTHONHASHSEED randomization)
+    digest = hashlib.md5(f"{o_key}-{d_key}".encode("utf-8")).hexdigest()
+    seed = int(digest[:6], 16) % 800
     return float(180 + seed)
 
 
 def clean_city_name(raw: str) -> str:
-    """Strips conversational noise and maps abbreviations to formal city names."""
+    """Strips conversational noise, port codes, and maps abbreviations to formal city names."""
+    raw = re.sub(r"\s*\([^)]*\)", "", raw or "")
     prefixes = [
         "fastest", "cheapest", "safest", "quickest", "best", "route", "shipping",
-        "shipment", "ship", "deliver", "delivery", "from", "frm", "please", "can", "you", "tell"
+        "shipment", "ship", "deliver", "delivery", "from", "frm", "please", "can",
+        "you", "tell", "optimize", "parcel", "package", "courier", "freight",
     ]
-    suffixes = ["nunchi", "ki", "lo", "to", "from", "road", "distance"]
+    suffixes = ["nunchi", "ki", "lo", "to", "from", "road", "distance", "port", "via"]
     words = raw.strip().split()
     while words and words[0].lower() in prefixes:
         words.pop(0)
@@ -131,6 +147,17 @@ def clean_city_name(raw: str) -> str:
     cleaned = " ".join(words).strip()
     key = cleaned.lower()
     return CITY_ALIASES.get(key, cleaned.title())
+
+
+def is_india_corridor(orig: str, dest: str) -> bool:
+    o = orig.lower().strip()
+    d = dest.lower().strip()
+    if o in GLOBAL_HUB_KEYS or d in GLOBAL_HUB_KEYS:
+        return False
+    if o in INDIA_CITY_KEYS and d in INDIA_CITY_KEYS:
+        return True
+    # Unknown local names (e.g. small Indian towns) stay on the domestic model
+    return o not in KNOWN_CITIES and d not in KNOWN_CITIES
 
 
 def parse_and_generate_corridor(
@@ -172,8 +199,8 @@ def parse_and_generate_corridor(
     if budget_match and not days_match and not hours_match:
         try:
             val = float(budget_match.group(1).replace(",", ""))
-            # If user entered budget in INR (> 500), convert roughly to USD equivalent for optimizer
-            max_budget = round(val / 84.0, 2) if val > 1000 else val
+            # INR amounts are typically 4+ digits; keep small USD budgets as USD
+            max_budget = round(val / INR_PER_USD, 2) if val >= 400 else val
         except (ValueError, TypeError):
             max_budget = None
 
@@ -189,7 +216,9 @@ def parse_and_generate_corridor(
         else:
             constraint_notes.append(f"⏱️ Hard Constraint: Max transit time ≤ **{max_days} days**")
     if max_budget is not None:
-        constraint_notes.append(f"💰 Hard Constraint: Max budget ≤ **${max_budget:,.2f}** (~₹{int(max_budget*84):,})")
+        constraint_notes.append(
+            f"💰 Hard Constraint: Max budget ≤ **₹{int(max_budget * INR_PER_USD):,}** (${max_budget:,.2f})"
+        )
 
     # ── 2. Detect Priority Intent ────────────────────────────────────────────
     if any(k in p_lower for k in ["less time", "speed", "faster", "fastest", "quick", "urgent", "rush", "fast"]):
@@ -220,156 +249,91 @@ def parse_and_generate_corridor(
 
     # ── 4. Detect Custom Origin & Destination ────────────────────────────────
     orig, dest = None, None
+    p_norm = re.sub(r"\s*\([^)]*\)", " ", p_lower)
+    p_norm = re.sub(r"\s+", " ", p_norm).strip()
 
     # Pattern A: Telugu connector: '<City1> nunchi <City2> (ki|lo)?'
-    m_tel = re.search(r'([a-zA-Z\s]+?)\s+nunchi\s+([a-zA-Z\s]+?)(?:\s+ki|\s+lo|,|$|\.|\bwith\b|\bwithin\b)', p_lower)
+    m_tel = re.search(r'([a-zA-Z\s]+?)\s+nunchi\s+([a-zA-Z\s]+?)(?:\s+ki|\s+lo|,|$|\.|\bwith\b|\bwithin\b)', p_norm)
     if m_tel:
         orig = clean_city_name(m_tel.group(1))
         dest = clean_city_name(m_tel.group(2))
 
-    # Pattern B: English connector: '(from|frm)? <City1> (to|->|—|-) <City2>'
+    # Pattern B: 'from X to Y' / 'frm hyd to wrngl'
     if not orig or not dest:
         m_to = re.search(
-            r'(?:from|frm\s+)?([a-zA-Z\s]+?)\s+(?:to|->|—|-)\s+([a-zA-Z\s]+?)(?:,|$|\.|\bwith\b|\bwithin\b|\bunder\b|\bin\b|\bhelp\b|\bwhich\b|\band\b|\bbudget\b|\bmax\b)',
-            p_lower
+            r'(?:from|frm)\s+([a-zA-Z][a-zA-Z\s]{1,32}?)\s+(?:to|->|—)\s+([a-zA-Z][a-zA-Z\s]{1,32}?)(?:,|$|\.|\bwith\b|\bwithin\b|\bunder\b|\bin\b|\bhelp\b|\bwhich\b|\band\b|\bbudget\b|\bmax\b)',
+            p_norm
         )
         if m_to:
             orig = clean_city_name(m_to.group(1))
             dest = clean_city_name(m_to.group(2))
 
+    # Pattern C: short 'hyd to warangal' without 'from'
+    if not orig or not dest:
+        m_short = re.search(r'\b([a-z]{3,20})\s+to\s+([a-z]{3,20})\b', p_norm)
+        if m_short:
+            orig = clean_city_name(m_short.group(1))
+            dest = clean_city_name(m_short.group(2))
+
     if orig and dest and orig.lower() != dest.lower():
         distance_km = estimate_distance_km(orig, dest)
         custom_id = "CUSTOM-01"
+        domestic = is_india_corridor(orig, dest)
 
-        # Realistic Speed & Transit Calculations:
-        # Direct Highway Express Courier (e.g. NH163 Hyd->Wgl, 150 km):
-        # Average road speed ~60-70 km/h + 30m dispatch = ~2.5 - 3.2 hours
-        express_hours = max(1.0, round((distance_km / 65.0) + 0.5, 1))
-        express_days = round(express_hours / 24.0, 3)
-
-        # Standard Surface Truckload: ~40 km/h + 1.5h handling = ~4.5 - 5.5 hours for 150km
-        truck_hours = max(1.5, round((distance_km / 40.0) + 1.5, 1))
-        truck_days = round(truck_hours / 24.0, 3)
-
-        # Dedicated Rail Freight: ~50 km/h + 1.5h yard handling = ~3.5 - 4.5 hours for 150km
-        rail_hours = max(1.2, round((distance_km / 50.0) + 1.5, 1))
-        rail_days = round(rail_hours / 24.0, 3)
-
-        # Regional Express / Air Cargo:
-        # Under 250km (inter-city regional corridor like Hyd->Wgl):
-        # Air cargo is unnecessary; same-day motorcycle/direct courier operates in ~2.5-3.0 hours
-        if distance_km < 250:
-            air_hours = max(0.8, round(express_hours * 0.85, 1))
-            air_name = "Same-Day Direct Highway Courier"
-            air_mode = "Priority Road Express"
-            air_hubs = f"Direct Corridor via NH163 ({orig} -> {dest}) (~{air_hours}h)"
+        if domestic:
+            quotes = india_domestic_quotes(distance_km)
+            keys = ("surface", "rail", "express", "fast")
+            cargo_label = "Commercial carton (~50 kg)"
+            peak_hours = max(quotes[k]["hours"] for k in keys)
+            max_days_default = max(2.0, (peak_hours / 24.0) * 2.0)
+            note_scale = "50 kg carton / small PTL"
         else:
-            air_hours = max(2.5, round(3.5 + (distance_km / 650.0), 1))
-            air_name = "Air Cargo Priority Express"
-            air_mode = "Air Freight"
-            air_hubs = f"{orig} Cargo Airport -> {dest} Cargo Gateway (~{air_hours}h)"
-        air_days = round(air_hours / 24.0, 3)
+            quotes = international_lcl_quotes(distance_km)
+            keys = ("ocean", "express", "resilient", "air")
+            cargo_label = "LCL consignment (~1 CBM)"
+            peak_days = max(quotes[k]["days"] for k in keys)
+            max_days_default = max(8.0, peak_days * 1.25)
+            note_scale = "1 CBM LCL, not a full container"
 
-        # Realistic Freight Costing:
-        # Commercial parcel rate in India:
-        # Rail freight parcel: ~₹4 - ₹6 per km = ₹600 - ₹900 for 150km (~$8 - $12 USD)
-        # Standard Truck parcel: ~₹6 - ₹9 per km = ₹900 - ₹1,400 for 150km (~$12 - $18 USD)
-        # Express Highway courier: ~₹10 - ₹15 per km = ₹1,500 - ₹2,300 for 150km (~$20 - $30 USD)
-        # Priority Same-Day: ~₹20 - ₹28 per km = ₹3,000 - ₹4,200 for 150km (~$38 - $55 USD)
-        base_rate_usd_km = 0.09  # ~$0.09 per km = ~₹7.5/km
-        rail_cost = round(max(8.0, distance_km * base_rate_usd_km * 0.70), 2)
-        road_cost = round(max(12.0, distance_km * base_rate_usd_km * 1.00), 2)
-        express_cost = round(max(18.0, distance_km * base_rate_usd_km * 1.60), 2)
-        air_cost = round(max(28.0, distance_km * base_rate_usd_km * 2.80), 2)
-
-        routes = [
-            {
+        peak_cost = max(quotes[k]["cost_usd"] for k in keys)
+        routes = []
+        for r_idx, key in enumerate(keys, start=1):
+            q = quotes[key]
+            if domestic:
+                hours = q["hours"]
+                transit_days = round(hours / 24.0, 3)
+                hubs = f"{orig} -> {dest} (~{hours}h)"
+                carbon = round(distance_km * q["carbon_kg_per_km"], 1)
+            else:
+                transit_days = float(q["days"])
+                hubs = q["hubs"]
+                carbon = round(transit_days * (18 if "Air" in q["name"] else 6), 1)
+            routes.append({
                 "shipment_id": custom_id,
                 "origin": orig,
                 "destination": dest,
                 "corridor": f"{orig} -> {dest} (~{int(distance_km)} km)",
-                "cargo_type": "Commercial Freight / Parcel",
-                "urgency": "High",
-                "max_budget_usd": air_cost * 1.5,
-                "max_transit_days": max(3.0, truck_days * 2.0),
-                "route_id": f"{custom_id}-R1",
-                "route_name": "Standard Surface Roadways",
-                "carrier": "VRL Logistics / TCI Freight",
-                "transport_mode": "Ground Truckload",
-                "intermediate_hubs": f"{orig} Hub -> State Highway -> {dest} (~{truck_hours}h)",
-                "cost_usd": road_cost,
-                "transit_time_days": truck_days,
-                "delay_probability": 0.18,
-                "congestion_risk": 40.0,
-                "geopolitical_risk": 3.0,
-                "carbon_emissions_kg": round(distance_km * 0.12, 1)
-            },
-            {
-                "shipment_id": custom_id,
-                "origin": orig,
-                "destination": dest,
-                "corridor": f"{orig} -> {dest} (~{int(distance_km)} km)",
-                "cargo_type": "Commercial Freight / Parcel",
-                "urgency": "High",
-                "max_budget_usd": air_cost * 1.5,
-                "max_transit_days": max(3.0, truck_days * 2.0),
-                "route_id": f"{custom_id}-R2",
-                "route_name": "Intermodal Rail Freight Parcel",
-                "carrier": "Indian Railways Freight / CONCOR",
-                "transport_mode": "Dedicated Rail Corridor",
-                "intermediate_hubs": f"{orig} Goods Yard -> {dest} Rail Terminal (~{rail_hours}h)",
-                "cost_usd": rail_cost,
-                "transit_time_days": rail_days,
-                "delay_probability": 0.06,
-                "congestion_risk": 15.0,
-                "geopolitical_risk": 2.0,
-                "carbon_emissions_kg": round(distance_km * 0.05, 1)
-            },
-            {
-                "shipment_id": custom_id,
-                "origin": orig,
-                "destination": dest,
-                "corridor": f"{orig} -> {dest} (~{int(distance_km)} km)",
-                "cargo_type": "Commercial Freight / Parcel",
-                "urgency": "High",
-                "max_budget_usd": air_cost * 1.5,
-                "max_transit_days": max(3.0, truck_days * 2.0),
-                "route_id": f"{custom_id}-R3",
-                "route_name": "Direct Highway Express Courier",
-                "carrier": "BlueDart / DTDC Express",
-                "transport_mode": "Express Roadway",
-                "intermediate_hubs": f"Direct Highway Corridor ({orig} -> {dest}) (~{express_hours}h)",
-                "cost_usd": express_cost,
-                "transit_time_days": express_days,
-                "delay_probability": 0.08,
-                "congestion_risk": 25.0,
-                "geopolitical_risk": 3.0,
-                "carbon_emissions_kg": round(distance_km * 0.14, 1)
-            },
-            {
-                "shipment_id": custom_id,
-                "origin": orig,
-                "destination": dest,
-                "corridor": f"{orig} -> {dest} (~{int(distance_km)} km)",
-                "cargo_type": "Commercial Freight / Parcel",
-                "urgency": "Critical",
-                "max_budget_usd": air_cost * 1.5,
-                "max_transit_days": max(3.0, truck_days * 2.0),
-                "route_id": f"{custom_id}-R4",
-                "route_name": air_name,
-                "carrier": "Priority Express / Indigo Cargo",
-                "transport_mode": air_mode,
-                "intermediate_hubs": air_hubs,
-                "cost_usd": air_cost,
-                "transit_time_days": air_days,
-                "delay_probability": 0.03,
-                "congestion_risk": 10.0,
-                "geopolitical_risk": 2.0,
-                "carbon_emissions_kg": round(distance_km * 0.28, 1)
-            }
-        ]
+                "cargo_type": cargo_label,
+                "urgency": "High" if r_idx < 4 else "Critical",
+                "max_budget_usd": round(peak_cost * 1.35, 2),
+                "max_transit_days": max_days_default,
+                "route_id": f"{custom_id}-R{r_idx}",
+                "route_name": q["name"],
+                "carrier": q["carrier"],
+                "transport_mode": q["mode"],
+                "intermediate_hubs": hubs,
+                "cost_usd": q["cost_usd"],
+                "transit_time_days": transit_days,
+                "delay_probability": q["delay_probability"],
+                "congestion_risk": q["congestion_risk"],
+                "geopolitical_risk": q["geopolitical_risk"],
+                "carbon_emissions_kg": carbon,
+            })
         custom_df = pd.DataFrame(routes)
-        msg = f"✨ Calculated corridor: **{orig} -> {dest}** (~{int(distance_km)} km highway distance). {combined_msg_prefix}"
+        msg = (
+            f"✨ Calculated corridor: **{orig} -> {dest}** (~{int(distance_km)} km, {note_scale}). "
+            f"{combined_msg_prefix}"
+        )
         return custom_df, weights, constraints, msg
 
     # Default fallback: return first shipment in dataset

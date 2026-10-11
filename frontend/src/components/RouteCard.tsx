@@ -1,4 +1,5 @@
 import type { RouteResult } from '../types';
+import { formatMoney } from '../money';
 
 interface RouteCardProps {
   route: RouteResult;
@@ -45,10 +46,10 @@ export default function RouteCard({ route, isRecommended }: RouteCardProps) {
         <div>
           <div className="label mb-1">Cost</div>
           <div className="text-sm font-semibold text-[#F1F5F9]">
-            ${route.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(route.cost).primary}
           </div>
           <div className="text-[10px] text-[#21D4C2] font-medium">
-            ≈ ₹{Math.round(route.cost * 84).toLocaleString()}
+            {formatMoney(route.cost).secondary}
           </div>
         </div>
         <div>

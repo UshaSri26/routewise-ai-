@@ -190,9 +190,10 @@ else:
             if submitted and user_prompt:
                 st.session_state["prompt_query"] = user_prompt
                 # Parse natural language query dynamically
-                parsed_df, parsed_weights, feedback_msg = parse_and_generate_corridor(user_prompt, df_fleet)
+                parsed_df, parsed_weights, parsed_constraints, feedback_msg = parse_and_generate_corridor(user_prompt, df_fleet)
                 st.session_state["custom_corridor_df"] = parsed_df
                 st.session_state["weights_config"] = parsed_weights
+                st.session_state["hard_constraints"] = parsed_constraints
                 st.session_state["ai_feedback_msg"] = feedback_msg
                 st.session_state["selected_shipment_id"] = parsed_df["shipment_id"].iloc[0]
                 st.rerun()
@@ -205,7 +206,7 @@ else:
                 st.session_state["selected_shipment_id"] = "SHP-001"
                 st.session_state["custom_corridor_df"] = None
                 st.session_state["weights_config"] = WeightsConfig(cost=0.40, time=0.30, risk=0.30)
-                st.session_state["ai_feedback_msg"] = "⚡ Loaded benchmark corridor **SHP-001 (Shanghai ➔ Rotterdam)** with Balanced (40/30/30) weights."
+                st.session_state["ai_feedback_msg"] = "⚡ Loaded benchmark corridor **SHP-001 (Hyderabad ➔ Warangal)** with Balanced (40/30/30) weights."
                 st.rerun()
         with c_p2:
             if st.button("🔍 Lowest-cost route", use_container_width=True):

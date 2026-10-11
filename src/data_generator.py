@@ -3,14 +3,23 @@ Synthetic Shipment and Route Dataset Generator for RouteWise AI.
 Generates realistic global trade corridors with explicit trade-offs across cost, transit time, and risk.
 """
 
-import json
 from pathlib import Path
 from typing import List, Dict, Any
 import numpy as np
 import pandas as pd
 
-# Global trade corridors (Origin -> Destination pairs)
+from src.freight_costs import CORRIDOR_DISTANCE_KM, india_domestic_quotes, international_lcl_quotes
+
+# Practical SME corridors first (India domestic carton/PTL), then global LCL lanes
 TRADE_LANES = [
+    {"origin": "Hyderabad", "destination": "Warangal", "corridor": "India Domestic", "km": 155},
+    {"origin": "Hyderabad", "destination": "Visakhapatnam", "corridor": "India Domestic", "km": 620},
+    {"origin": "Chennai", "destination": "Bengaluru", "corridor": "India Domestic", "km": 350},
+    {"origin": "Mumbai", "destination": "Delhi", "corridor": "India Domestic", "km": 1410},
+    {"origin": "Pune", "destination": "Hyderabad", "corridor": "India Domestic", "km": 560},
+    {"origin": "Bengaluru", "destination": "Hyderabad", "corridor": "India Domestic", "km": 575},
+    {"origin": "Ahmedabad", "destination": "Mumbai", "corridor": "India Domestic", "km": 530},
+    {"origin": "Kolkata", "destination": "Chennai", "corridor": "India Domestic", "km": 1670},
     {"origin": "Shanghai (CNSHA)", "destination": "Rotterdam (NLRTM)", "corridor": "Asia-Europe"},
     {"origin": "Ningbo (CNNGB)", "destination": "Los Angeles (USLAX)", "corridor": "Trans-Pacific"},
     {"origin": "Mumbai (INBOM)", "destination": "Hamburg (DEHAM)", "corridor": "South Asia-Europe"},
@@ -52,52 +61,9 @@ CARGO_TYPES = [
     {"type": "Automotive Parts (JIT)", "urgency": "Critical", "time_sensitivity": 0.85, "risk_sensitivity": 0.7}
 ]
 
-ROUTE_ARCHETYPES = [
-    {
-        "name": "Economic Standard Ocean",
-        "mode": "Ocean",
-        "carrier_pool": ["MSC", "Cosco Shipping", "Evergreen", "Ocean Network Express"],
-        "cost_multiplier": 1.0,
-        "time_multiplier": 1.0,
-        "delay_prob_range": (0.25, 0.45),
-        "congestion_range": (50, 85),
-        "geopolitical_range": (20, 60),
-        "hubs": ["Singapore", "Colombo", "Suez Canal"]
-    },
-    {
-        "name": "Express Direct Ocean",
-        "mode": "Ocean-Express",
-        "carrier_pool": ["Maersk", "CMA CGM", "Hapag-Lloyd"],
-        "cost_multiplier": 1.35,
-        "time_multiplier": 0.75,
-        "delay_prob_range": (0.10, 0.22),
-        "congestion_range": (20, 45),
-        "geopolitical_range": (20, 50),
-        "hubs": ["Direct / Single Transshipment"]
-    },
-    {
-        "name": "Resilient Cape / Geopolitical Bypass",
-        "mode": "Ocean-Resilient",
-        "carrier_pool": ["Maersk", "MSC Resilient Lane", "Hapag-Lloyd Alternative"],
-        "cost_multiplier": 1.25,
-        "time_multiplier": 1.20,
-        "delay_prob_range": (0.08, 0.18),
-        "congestion_range": (15, 35),
-        "geopolitical_range": (5, 20),
-        "hubs": ["Cape of Good Hope (Bypasses Red Sea)", "Port Louis"]
-    },
-    {
-        "name": "Multimodal Sea-Air / Sea-Rail Express",
-        "mode": "Multimodal / Air-Sea",
-        "carrier_pool": ["Emirates SkyCargo / DP World", "DHL Global Forwarding", "Kuehne+Nagel"],
-        "cost_multiplier": 2.40,
-        "time_multiplier": 0.45,
-        "delay_prob_range": (0.05, 0.12),
-        "congestion_range": (10, 30),
-        "geopolitical_range": (10, 30),
-        "hubs": ["Dubai Air Cargo Hub", "Baku Rail Hub"]
-    }
-]
+# Legacy ocean archetype labels kept for international LCL quote mapping
+INTL_QUOTE_KEYS = ("ocean", "express", "resilient", "air")
+INDIA_QUOTE_KEYS = ("surface", "rail", "express", "fast")
 
 
 def generate_shipments_dataset(num_shipments: int = 30, seed: int = 42) -> pd.DataFrame:
@@ -112,40 +78,44 @@ def generate_shipments_dataset(num_shipments: int = 30, seed: int = 42) -> pd.Da
         lane = TRADE_LANES[i % len(TRADE_LANES)]
         cargo = CARGO_TYPES[i % len(CARGO_TYPES)]
         shipment_id = f"SHP-{i+1:03d}"
+        is_india = lane["corridor"] == "India Domestic"
 
-        # Baseline cost and time based on lane distance heuristics
-        base_cost = np.random.uniform(2800, 4800)
-        base_days = np.random.uniform(22, 34)
+        if is_india:
+            quotes = india_domestic_quotes(float(lane.get("km", 450)))
+            ordered = [quotes[k] for k in INDIA_QUOTE_KEYS]
+        else:
+            km = float(CORRIDOR_DISTANCE_KM.get(lane["corridor"], 12000))
+            quotes = international_lcl_quotes(km)
+            ordered = [quotes[k] for k in INTL_QUOTE_KEYS]
 
-        # Baseline constraints for the shipment
-        # Max budget ~ 1.8x base cost, Max transit days ~ 1.3x base days
-        max_budget = round(base_cost * np.random.uniform(1.6, 2.2), -2)
-        max_transit_days = round(base_days * np.random.uniform(1.15, 1.45), 1)
+        peak_cost = max(q["cost_usd"] for q in ordered)
+        if is_india:
+            peak_days = max(q["hours"] for q in ordered) / 24.0
+        else:
+            peak_days = max(q["days"] for q in ordered)
+
+        max_budget = round(peak_cost * np.random.uniform(1.25, 1.70), 2)
+        max_transit_days = round(peak_days * np.random.uniform(1.15, 1.45), 2)
 
         # Every 7th shipment has tighter constraints to test boundary / infeasibility handling
         if (i + 1) % 7 == 0:
-            max_transit_days = round(base_days * 0.85, 1)  # Strict rush
+            max_transit_days = round(peak_days * 0.85, 2)
         if (i + 1) % 9 == 0:
-            max_budget = round(base_cost * 1.15, -2)       # Tight budget
+            max_budget = round(peak_cost * 1.08, 2)
 
-        for r_idx, archetype in enumerate(ROUTE_ARCHETYPES, start=1):
+        for r_idx, quote in enumerate(ordered, start=1):
             route_id = f"{shipment_id}-R{r_idx}"
-            carrier = np.random.choice(archetype["carrier_pool"])
+            cost = round(quote["cost_usd"] * float(np.random.uniform(0.94, 1.06)), 2)
 
-            # Calculate metrics with realistic random variation
-            cost = round(base_cost * archetype["cost_multiplier"] * np.random.uniform(0.95, 1.05), 2)
-            transit_days = round(base_days * archetype["time_multiplier"] * np.random.uniform(0.93, 1.07), 1)
-
-            delay_p = round(float(np.random.uniform(*archetype["delay_prob_range"])), 3)
-            congestion = round(float(np.random.uniform(*archetype["congestion_range"])), 1)
-            geopol_risk = round(float(np.random.uniform(*archetype["geopolitical_range"])), 1)
-
-            # Carbon estimation (approx 0.03 kg CO2/ton-km for ocean, 0.5 for air-multimodal)
-            carbon_factor = 3200 if "Multimodal" in archetype["name"] else 950
-            carbon_kg = round(float(transit_days * carbon_factor * np.random.uniform(0.9, 1.1)), 1)
-
-            # Intermediate hubs
-            hubs_str = " -> ".join(archetype["hubs"])
+            if is_india:
+                hours = quote["hours"] * float(np.random.uniform(0.93, 1.07))
+                transit_days = round(hours / 24.0, 3)
+                hubs_str = f"{lane['origin']} -> {lane['destination']} (~{round(hours, 1)}h)"
+                carbon_kg = round(float(lane.get("km", 450)) * quote["carbon_kg_per_km"], 1)
+            else:
+                transit_days = round(quote["days"] * float(np.random.uniform(0.94, 1.06)), 1)
+                hubs_str = quote["hubs"]
+                carbon_kg = round(float(transit_days * (18 if "Air" in quote["name"] else 6) * np.random.uniform(0.9, 1.1)), 1)
 
             records.append({
                 "shipment_id": shipment_id,
@@ -157,15 +127,15 @@ def generate_shipments_dataset(num_shipments: int = 30, seed: int = 42) -> pd.Da
                 "max_budget_usd": max_budget,
                 "max_transit_days": max_transit_days,
                 "route_id": route_id,
-                "route_name": archetype["name"],
-                "carrier": carrier,
-                "transport_mode": archetype["mode"],
+                "route_name": quote["name"],
+                "carrier": quote["carrier"],
+                "transport_mode": quote["mode"],
                 "intermediate_hubs": hubs_str,
                 "cost_usd": cost,
                 "transit_time_days": transit_days,
-                "delay_probability": delay_p,
-                "congestion_risk": congestion,
-                "geopolitical_risk": geopol_risk,
+                "delay_probability": quote["delay_probability"],
+                "congestion_risk": quote["congestion_risk"],
+                "geopolitical_risk": quote["geopolitical_risk"],
                 "carbon_emissions_kg": carbon_kg
             })
 
