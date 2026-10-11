@@ -194,7 +194,7 @@ export default function MapPage({ result: initialResult }: MapPageProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <label className="text-xs text-[#93A4B8] whitespace-nowrap font-medium">Select Shipment:</label>
           <select
             className="input-field py-1.5 px-3 text-xs w-auto min-w-[200px]"
@@ -207,6 +207,29 @@ export default function MapPage({ result: initialResult }: MapPageProps) {
               </option>
             ))}
           </select>
+
+          {/* Direct Google Maps Live Route Launcher */}
+          {(() => {
+            const currentShipment = shipments.find((s) => s.shipment_id === selectedId);
+            const orig = currentShipment?.origin || currentResult?.parsed_origin || 'Hyderabad';
+            const dest = currentShipment?.destination || currentResult?.parsed_destination || 'Warangal';
+            const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(orig)}&destination=${encodeURIComponent(dest)}`;
+            return (
+              <a
+                href={gmapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#21D4C2]/15 hover:bg-[#21D4C2]/25 text-[#21D4C2] border border-[#21D4C2]/40 text-xs font-semibold transition-all shadow-sm"
+                title="Open live ground navigation & turn-by-turn traffic directly in Google Maps"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+                </svg>
+                <span>Live Google Maps</span>
+                <span className="text-[10px] opacity-75">↗</span>
+              </a>
+            );
+          })()}
         </div>
       </div>
 
@@ -452,11 +475,13 @@ export default function MapPage({ result: initialResult }: MapPageProps) {
                     <div className="grid grid-cols-3 gap-1 pt-2 border-t border-[#22344A] text-center">
                       <div>
                         <div className="text-[9px] text-[#93A4B8] uppercase">Cost</div>
-                        <div className="text-xs font-semibold text-[#F1F5F9]">${r.cost?.toLocaleString()}</div>
+                        <div className="text-xs font-semibold text-[#F1F5F9]">${r.cost?.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</div>
+                        <div className="text-[9px] text-[#21D4C2]">≈₹{Math.round(r.cost * 84).toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-[9px] text-[#93A4B8] uppercase">Days</div>
-                        <div className="text-xs font-semibold text-[#F1F5F9]">{r.transit_days}d</div>
+                        <div className="text-[9px] text-[#93A4B8] uppercase">Transit</div>
+                        <div className="text-xs font-semibold text-[#F1F5F9]">{r.transit_days < 1.0 ? `${Math.round(r.transit_days * 24 * 10) / 10}h` : `${r.transit_days}d`}</div>
+                        <div className="text-[9px] text-[#93A4B8]">{r.transit_days < 1.0 ? `(${r.transit_days}d)` : `(${Math.round(r.transit_days*24)}h)`}</div>
                       </div>
                       <div>
                         <div className="text-[9px] text-[#93A4B8] uppercase">Status</div>

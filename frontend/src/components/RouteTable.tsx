@@ -42,9 +42,13 @@ export default function RouteTable({ routes, recommendedId }: RouteTableProps) {
                   {r.hubs || r.mode}
                 </td>
                 <td className="px-4 py-3 text-[#F1F5F9] whitespace-nowrap">
-                  ${r.cost.toLocaleString()}
+                  <div>${r.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div className="text-[10px] text-[#21D4C2]">≈ ₹{Math.round(r.cost * 84).toLocaleString()}</div>
                 </td>
-                <td className="px-4 py-3 text-[#F1F5F9]">{r.transit_days}d</td>
+                <td className="px-4 py-3 text-[#F1F5F9] whitespace-nowrap">
+                  <div>{r.transit_days < 1.0 ? `${Math.round(r.transit_days * 24 * 10) / 10} hrs` : `${r.transit_days}d`}</div>
+                  <div className="text-[10px] text-[#93A4B8]">{r.transit_days < 1.0 ? `(${r.transit_days}d)` : `(${Math.round(r.transit_days * 24)}h)`}</div>
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className={`font-medium ${
                     r.delay_probability > 0.4 ? 'text-[#FB7185]' :

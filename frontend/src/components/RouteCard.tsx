@@ -42,11 +42,33 @@ export default function RouteCard({ route, isRecommended }: RouteCardProps) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <Metric label="Cost" value={`$${route.cost.toLocaleString()}`} />
-        <Metric label="Transit" value={`${route.transit_days}d`} />
-        <Metric label="Delay Risk" value={`${(route.delay_probability * 100).toFixed(0)}%`} color={
-          route.delay_probability > 0.4 ? '#FB7185' : route.delay_probability > 0.2 ? '#FBBF24' : '#34D399'
-        } />
+        <div>
+          <div className="label mb-1">Cost</div>
+          <div className="text-sm font-semibold text-[#F1F5F9]">
+            ${route.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[10px] text-[#21D4C2] font-medium">
+            ≈ ₹{Math.round(route.cost * 84).toLocaleString()}
+          </div>
+        </div>
+        <div>
+          <div className="label mb-1">Transit</div>
+          <div className="text-sm font-semibold text-[#F1F5F9]">
+            {route.transit_days < 1.0
+              ? `${Math.round(route.transit_days * 24 * 10) / 10} hrs`
+              : `${route.transit_days}d`}
+          </div>
+          <div className="text-[10px] text-[#93A4B8]">
+            {route.transit_days < 1.0 ? `(${route.transit_days} days)` : `(${Math.round(route.transit_days * 24)}h)`}
+          </div>
+        </div>
+        <Metric
+          label="Delay Risk"
+          value={`${(route.delay_probability * 100).toFixed(0)}%`}
+          color={
+            route.delay_probability > 0.4 ? '#FB7185' : route.delay_probability > 0.2 ? '#FBBF24' : '#34D399'
+          }
+        />
         <Metric label="Composite Risk" value={route.composite_risk.toFixed(2)} />
       </div>
 
