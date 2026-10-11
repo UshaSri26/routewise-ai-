@@ -14,6 +14,7 @@ from typing import Tuple, Optional, Dict
 import pandas as pd
 from src.optimizer import WeightsConfig, HardConstraints
 from src.freight_costs import INR_PER_USD, india_domestic_quotes, international_lcl_quotes
+from src.money import format_money
 
 # Real coordinates for common Indian & Global logistics hubs
 KNOWN_CITIES: Dict[str, Tuple[float, float]] = {
@@ -217,7 +218,7 @@ def parse_and_generate_corridor(
             constraint_notes.append(f"⏱️ Hard Constraint: Max transit time ≤ **{max_days} days**")
     if max_budget is not None:
         constraint_notes.append(
-            f"💰 Hard Constraint: Max budget ≤ **₹{int(max_budget * INR_PER_USD):,}** (${max_budget:,.2f})"
+            f"💰 Hard Constraint: Max budget ≤ **{format_money(max_budget)}**"
         )
 
     # ── 2. Detect Priority Intent ────────────────────────────────────────────
@@ -283,17 +284,17 @@ def parse_and_generate_corridor(
         if domestic:
             quotes = india_domestic_quotes(distance_km)
             keys = ("surface", "rail", "express", "fast")
-            cargo_label = "Commercial carton (~50 kg)"
+            cargo_label = "Commercial carton (~10 kg)"
             peak_hours = max(quotes[k]["hours"] for k in keys)
             max_days_default = max(2.0, (peak_hours / 24.0) * 2.0)
-            note_scale = "50 kg carton / small PTL"
+            note_scale = "10 kg carton / courier parcel"
         else:
             quotes = international_lcl_quotes(distance_km)
             keys = ("ocean", "express", "resilient", "air")
-            cargo_label = "LCL consignment (~1 CBM)"
+            cargo_label = "Export samples (~15 kg / 0.1 CBM)"
             peak_days = max(quotes[k]["days"] for k in keys)
             max_days_default = max(8.0, peak_days * 1.25)
-            note_scale = "1 CBM LCL, not a full container"
+            note_scale = "15 kg sample shipment, not a container"
 
         peak_cost = max(quotes[k]["cost_usd"] for k in keys)
         routes = []

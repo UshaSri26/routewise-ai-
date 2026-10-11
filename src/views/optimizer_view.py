@@ -15,6 +15,7 @@ from src.ui_theme import (
 )
 from src.optimizer import RouteOptimizer, WeightsConfig, HardConstraints
 from src.explanations import LLMExplainer, RuleBasedExplainer
+from src.money import format_money
 
 
 def render_optimizer(df_fleet: pd.DataFrame, api_key: str = None):
@@ -104,8 +105,8 @@ def render_optimizer(df_fleet: pd.DataFrame, api_key: str = None):
             en_budget = st.checkbox("Enforce Max Budget", value=False)
             max_b_val = None
             if en_budget:
-                def_b = float(round(shipment_df["cost_usd"].mean() * 1.25, -2))
-                max_b_val = st.number_input("Max Budget ($ USD)", min_value=1000.0, max_value=60000.0, value=def_b, step=500.0)
+                def_b = float(max(5.0, round(shipment_df["cost_usd"].mean() * 1.35, 2)))
+                max_b_val = st.number_input("Max Budget (USD)", min_value=1.0, max_value=2000.0, value=def_b, step=5.0)
 
         with c_b2:
             en_time = st.checkbox("Enforce Max Transit Days", value=False)
@@ -175,7 +176,7 @@ def render_optimizer(df_fleet: pd.DataFrame, api_key: str = None):
         # KPI Metrics Row
         m1, m2, m3, m4, m5 = st.columns(5)
         with m1:
-            st.metric("Landed Cost", f"${winner.cost_usd:,.2f}", 
+            st.metric("Freight Cost", format_money(winner.cost_usd),
                       delta=f"{result.tradeoff_summary.get('cost_pct_diff', 0):+.1f}% vs runner-up" if result.tradeoff_summary else None,
                       delta_color="inverse")
         with m2:
@@ -217,7 +218,7 @@ def render_optimizer(df_fleet: pd.DataFrame, api_key: str = None):
             "Route Name": r.route_name,
             "Carrier": r.carrier,
             "Mode": r.transport_mode,
-            "Cost ($ USD)": f"${r.cost_usd:,.2f}",
+            "Cost": format_money(r.cost_usd),
             "Transit (Days)": f"{r.transit_time_days:.1f}",
             "Delay Prob": f"{r.delay_probability*100:.1f}%",
             "Congestion": f"{r.congestion_risk:.0f}/100",
@@ -274,16 +275,16 @@ def render_optimizer(df_fleet: pd.DataFrame, api_key: str = None):
         for r in result.all_routes:
             bar_items.append({
                 "Route ID": r.route_id,
-                "Cost ($/100)": r.cost_usd / 100.0,
-                "Transit Days": r.transit_time_days,
-                "Risk (x100)": r.composite_risk * 100.0
+                "Cost (₹)": r.cost_usd * 84.0,
+                "Transit Hours": r.transit_time_days * 24.0,
+                "Risk (x100)": r.composite_risk * 100.0,
             })
         df_bar = pd.DataFrame(bar_items)
         
         fig_bar = px.bar(
             df_bar,
             x="Route ID",
-            y=["Cost ($/100)", "Transit Days", "Risk (x100)"],
+            y=["Cost (₹)", "Transit Hours", "Risk (x100)"],
             barmode="group",
             color_discrete_sequence=[PRIMARY_TEAL, "#3B82F6", "#F59E0B"]
         )

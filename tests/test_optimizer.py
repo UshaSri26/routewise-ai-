@@ -251,3 +251,4 @@ def test_rule_based_explainer(sample_routes_df):
     assert result.recommended_route.route_id in text
     assert "$" in text
     assert "Trade-off" in text
+    assert "demurrage" not in text.lower()

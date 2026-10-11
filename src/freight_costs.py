@@ -1,46 +1,52 @@
 """
-Practical freight quotes for SME-scale shipments (not full 40ft peak-season FCL).
+Indicative planning estimates for small-business shipments, not live carrier quotes.
 
-Domestic India: ~50 kg commercial carton / small PTL.
-International: ~1 CBM LCL (~200 kg mixed cargo).
+Domestic India: 10 kg commercial carton, modeled with per-shipment handling and
+distance charges. International: 15 kg / 0.1 CBM export sample, including an
+allowance for consolidation and handling; customs duties and taxes are excluded.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any, Dict
 
-INR_PER_USD = 84.0
+from src.money import INR_PER_USD, usd_from_inr
 
-
-def usd_from_inr(inr: float) -> float:
-    return round(max(0.5, inr / INR_PER_USD), 2)
+# Re-export so existing imports keep working
+__all__ = [
+    "INR_PER_USD",
+    "usd_from_inr",
+    "india_domestic_quotes",
+    "international_lcl_quotes",
+    "CORRIDOR_DISTANCE_KM",
+]
 
 
 def india_domestic_quotes(distance_km: float) -> Dict[str, Any]:
     """
-    Realistic India carton rates (Delhivery / Gati / BlueDart ballpark).
+    Indicative India 10 kg carton rates with minimum handling charges.
 
-    Hyderabad → Warangal (~150 km): about ₹180–₹750, not ₹3,000+.
-    Mumbai → Delhi (~1,400 km): about ₹1,500–₹5,500.
+    Hyderabad → Warangal (~155 km): about ₹230–₹800.
+    Mumbai → Delhi (~1,410 km): about ₹1,100–₹3,300.
     """
     km = max(30.0, float(distance_km))
 
-    rail_inr = max(110.0, 40 + 1.00 * km)
-    surface_inr = max(150.0, 60 + 1.45 * km)
-    express_inr = max(240.0, 95 + 2.20 * km)
+    rail_inr = max(220.0, 120 + 0.70 * km)
+    surface_inr = max(320.0, 260 + 0.90 * km)
+    express_inr = max(450.0, 350 + 1.30 * km)
 
     truck_hours = max(1.5, round((km / 42.0) + 1.2, 1))
     rail_hours = max(1.2, round((km / 50.0) + 1.4, 1))
     express_hours = max(1.0, round((km / 62.0) + 0.4, 1))
 
     if km < 280:
-        fast_inr = max(320.0, 170 + 2.90 * km)
+        fast_inr = max(650.0, 500 + 1.75 * km)
         fast_hours = max(0.8, round(express_hours * 0.82, 1))
         fast_name = "Same-Day Highway Courier"
         fast_mode = "Priority Road Express"
         fast_carrier = "Dunzo / Porter / Local Express"
     else:
-        fast_inr = max(480.0, 220 + 3.10 * km)
+        fast_inr = max(900.0, 800 + 1.70 * km)
         fast_hours = max(2.5, round(3.0 + (km / 700.0), 1))
         fast_name = "Domestic Air Cargo"
         fast_mode = "Air Freight"
@@ -96,9 +102,10 @@ def india_domestic_quotes(distance_km: float) -> Dict[str, Any]:
 
 def international_lcl_quotes(distance_km: float) -> Dict[str, Any]:
     """
-    1 CBM LCL quotes (small-business shipment), not a peak-season 40ft box.
+    Indicative 15 kg / 0.1 CBM export-sample costs, including a small-shipment
+    handling allowance (not customs duties, taxes, or a live carrier quote).
 
-    Shanghai → Rotterdam (~20,000 km): ocean ~$350–$500, air ~$1,600.
+    Shanghai → Rotterdam (~20,000 km): consolidated ocean ~$200, air ~$440.
     """
     km = max(400.0, float(distance_km))
 
@@ -107,10 +114,10 @@ def international_lcl_quotes(distance_km: float) -> Dict[str, Any]:
     resilient_days = round(max(7.0, ocean_days * 1.16), 1)
     air_days = round(max(1.2, 1.0 + km / 7200.0), 1)
 
-    ocean_cost = round(max(85.0, 65 + 0.0135 * km), 2)
-    express_cost = round(max(115.0, 90 + 0.0180 * km), 2)
-    resilient_cost = round(max(105.0, 80 + 0.0160 * km), 2)
-    air_cost = round(max(190.0, 140 + 0.072 * km), 2)
+    ocean_cost = round(max(140.0, 100 + 0.0052 * km), 2)
+    express_cost = round(max(175.0, 130 + 0.0064 * km), 2)
+    resilient_cost = round(max(165.0, 120 + 0.0060 * km), 2)
+    air_cost = round(max(180.0, 155 + 0.0145 * km), 2)
 
     return {
         "ocean": {

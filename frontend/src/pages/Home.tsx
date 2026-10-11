@@ -8,10 +8,10 @@ interface HomeProps {
 }
 
 const SUGGESTIONS = [
-  'Fastest route from Shanghai to Rotterdam',
-  'Cheapest shipping from Mumbai to New York',
-  'Most reliable route from Dubai to Los Angeles',
-  'Low-risk path from Singapore to Hamburg',
+  'Cheapest parcel from Hyderabad to Warangal',
+  'Fastest courier from Chennai to Bengaluru',
+  'Ship from Mumbai to Delhi within 2 days',
+  'Ocean freight from Shanghai to Rotterdam',
 ];
 
 export default function Home({ onResult, onNavigate }: HomeProps) {
@@ -106,7 +106,7 @@ export default function Home({ onResult, onNavigate }: HomeProps) {
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={handleKey}
                 rows={3}
-                placeholder="Describe your shipment… e.g. fastest route from Shanghai to Rotterdam, prefer low risk"
+                placeholder="Describe your shipment… e.g. cheapest parcel from Hyderabad to Warangal"
                 className="w-full bg-transparent px-5 pt-4 pb-2 text-sm text-[#F1F5F9] placeholder:text-[#4A5568] resize-none focus:outline-none leading-relaxed"
               />
               <div className="flex items-center justify-between px-4 pb-3">

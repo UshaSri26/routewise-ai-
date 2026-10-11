@@ -1,163 +1,185 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getShipments, optimize } from '../api';
-import type { OptimizationResult, Shipment } from '../types';
+import type { OptimizationResult, RouteResult, Shipment } from '../types';
+import { formatMoney } from '../money';
 
 interface MapPageProps {
   result: OptimizationResult | null;
 }
 
-// Global coordinates covering all trade lane ports and intermediate chokepoints
-const PORT_COORDS: Record<string, [number, number]> = {
-  // Asia Ports
-  'Shanghai': [121.5, 31.2],
-  'Ningbo': [121.6, 29.9],
-  'Shenzhen': [114.1, 22.5],
-  'Qingdao': [120.3, 36.1],
-  'Hong Kong': [114.2, 22.3],
-  'Kaohsiung': [120.3, 22.6],
-  'Taipei': [121.5, 25.0],
-  'Tokyo': [139.7, 35.7],
-  'Yokohama': [139.6, 35.4],
-  'Kobe': [135.2, 34.7],
-  'Busan': [129.0, 35.1],
-  'Incheon': [126.7, 37.5],
-  'Singapore': [103.8, 1.35],
-  'Port Klang': [101.4, 3.0],
-  'Tanjung Pelepas': [103.5, 1.4],
-  'Ho Chi Minh': [106.7, 10.8],
-  'Bangkok': [100.5, 13.8],
-  'Jakarta': [106.8, -6.2],
-  'Manila': [121.0, 14.6],
+type Coordinate = [longitude: number, latitude: number];
 
-  // South Asia Ports & Cities
-  'Mumbai': [72.9, 19.1],
-  'Chennai': [80.3, 13.1],
-  'Mundra': [69.7, 22.8],
-  'Hyderabad': [78.5, 17.4],
-  'Vishakapatnam': [83.3, 17.7],
-  'Visakhapatnam': [83.3, 17.7],
-  'Warangal': [79.6, 18.0],
-  'Delhi': [77.2, 28.6],
-  'Kolkata': [88.4, 22.6],
-  'Colombo': [79.9, 6.9],
-  'Chittagong': [91.8, 22.3],
-  'Karachi': [67.0, 24.9],
-
-  // Middle East & Africa
-  'Dubai': [55.3, 25.2],
-  'Jebel Ali': [55.0, 25.0],
-  'Alexandria': [29.9, 31.2],
-  'Durban': [31.0, -29.9],
-  'Cape Town': [18.4, -33.9],
-  'Cape of Good Hope': [18.5, -34.4],
-  'Port Louis': [57.5, -20.2],
-
-  // Chokepoints
-  'Suez Canal': [32.5, 30.0],
-  'Suez': [32.5, 30.0],
-  'Panama': [-79.5, 9.0],
-  'Malacca': [101.5, 2.5],
-  'Baku': [49.9, 40.4],
-
-  // Europe Ports
-  'Rotterdam': [4.5, 51.9],
-  'Hamburg': [10.0, 53.6],
-  'Antwerp': [4.4, 51.2],
-  'Felixstowe': [1.3, 52.0],
-  'Le Havre': [0.1, 49.5],
-  'London': [0.1, 51.5],
-  'London Gateway': [0.5, 51.5],
-  'Frankfurt': [8.7, 50.1],
-  'Amsterdam': [4.9, 52.4],
-  'Bremerhaven': [8.6, 53.5],
-  'Valencia': [-0.4, 39.5],
-  'Barcelona': [2.2, 41.4],
-  'Genoa': [8.9, 44.4],
-  'Marseille': [5.4, 43.3],
-  'Piraeus': [23.6, 37.9],
-
-  // North & South America
-  'Los Angeles': [-118.2, 34.05],
-  'Long Beach': [-118.2, 33.8],
-  'Oakland': [-122.3, 37.8],
-  'Seattle': [-122.3, 47.6],
-  'New York': [-74.0, 40.7],
-  'Savannah': [-81.1, 32.1],
-  'Chicago': [-87.6, 41.9],
-  'Vancouver': [-123.1, 49.3],
-  'Veracruz': [-96.1, 19.2],
-  'Santos': [-46.3, -23.9],
-
-  // Oceania
-  'Sydney': [151.2, -33.9],
-  'Melbourne': [144.9, -37.8],
+const PORT_COORDS: Record<string, Coordinate> = {
+  Shanghai: [121.5, 31.2], Ningbo: [121.6, 29.9], Shenzhen: [114.1, 22.5],
+  Qingdao: [120.3, 36.1], 'Hong Kong': [114.2, 22.3], Kaohsiung: [120.3, 22.6],
+  Taipei: [121.5, 25], Tokyo: [139.7, 35.7], Yokohama: [139.6, 35.4],
+  Kobe: [135.2, 34.7], Busan: [129, 35.1], Incheon: [126.7, 37.5],
+  Singapore: [103.8, 1.35], 'Port Klang': [101.4, 3], 'Tanjung Pelepas': [103.5, 1.4],
+  'Ho Chi Minh': [106.7, 10.8], Bangkok: [100.5, 13.8], Jakarta: [106.8, -6.2],
+  Manila: [121, 14.6], Mumbai: [72.9, 19.1], Chennai: [80.3, 13.1],
+  Mundra: [69.7, 22.8], Hyderabad: [78.5, 17.4], Vishakapatnam: [83.3, 17.7],
+  Visakhapatnam: [83.3, 17.7], Warangal: [79.6, 18], Vijayawada: [80.65, 16.51],
+  Jaipur: [75.79, 26.91], Surat: [72.83, 21.17], Nagpur: [79.09, 21.15],
+  Kochi: [76.27, 9.93], Lucknow: [80.95, 26.85], Pune: [73.86, 18.52],
+  Ahmedabad: [72.57, 23.03], Delhi: [77.2, 28.6], Kolkata: [88.4, 22.6],
+  Colombo: [79.9, 6.9], Chittagong: [91.8, 22.3], Karachi: [67, 24.9],
+  Dubai: [55.3, 25.2], 'Jebel Ali': [55, 25], Alexandria: [29.9, 31.2],
+  Durban: [31, -29.9], 'Cape Town': [18.4, -33.9], 'Cape of Good Hope': [18.5, -34.4],
+  'Port Louis': [57.5, -20.2], 'Suez Canal': [32.5, 30], Suez: [32.5, 30],
+  Panama: [-79.5, 9], Malacca: [101.5, 2.5], Baku: [49.9, 40.4],
+  Rotterdam: [4.5, 51.9], Hamburg: [10, 53.6], Antwerp: [4.4, 51.2],
+  Felixstowe: [1.3, 52], 'Le Havre': [0.1, 49.5], London: [0.1, 51.5],
+  'London Gateway': [0.5, 51.5], Frankfurt: [8.7, 50.1], Amsterdam: [4.9, 52.4],
+  Bremerhaven: [8.6, 53.5], Valencia: [-0.4, 39.5], Barcelona: [2.2, 41.4],
+  Genoa: [8.9, 44.4], Marseille: [5.4, 43.3], Piraeus: [23.6, 37.9],
+  'Los Angeles': [-118.2, 34.05], 'Long Beach': [-118.2, 33.8],
+  Oakland: [-122.3, 37.8], Seattle: [-122.3, 47.6], 'New York': [-74, 40.7],
+  Savannah: [-81.1, 32.1], Chicago: [-87.6, 41.9], Vancouver: [-123.1, 49.3],
+  Veracruz: [-96.1, 19.2], Santos: [-46.3, -23.9], Sydney: [151.2, -33.9],
+  Melbourne: [144.9, -37.8],
 };
 
-// Simplified SVG world landmass contours (Geo projection)
-const WORLD_LANDMASSES = [
-  // North America
-  "M 150 70 L 190 70 L 230 90 L 260 110 L 250 160 L 220 180 L 190 190 L 170 170 L 140 120 Z",
-  // South America
-  "M 215 195 L 245 205 L 260 250 L 240 310 L 220 330 L 210 270 L 205 220 Z",
-  // Eurasia
-  "M 370 70 L 460 65 L 560 70 L 640 90 L 670 120 L 650 170 L 590 180 L 530 190 L 490 170 L 440 160 L 390 140 L 370 100 Z",
-  // Africa
-  "M 385 155 L 435 155 L 460 200 L 445 280 L 415 315 L 385 280 L 370 200 Z",
-  // India subcontinent
-  "M 510 180 L 535 195 L 525 240 L 505 210 Z",
-  // Australia
-  "M 650 250 L 710 250 L 730 290 L 690 320 L 640 290 Z",
-  // UK & Scandinavia
-  "M 370 80 L 400 65 L 410 100 L 380 110 Z",
-  // Japan
-  "M 670 130 L 685 140 L 680 160 L 665 150 Z"
+const LAND_POLYGONS: Coordinate[][] = [
+  [[-168, 72], [-145, 70], [-125, 58], [-130, 50], [-123, 42], [-117, 32], [-105, 25], [-97, 18], [-82, 9], [-77, 25], [-60, 48], [-80, 60], [-105, 73], [-140, 72]],
+  [[-81, 12], [-68, 10], [-50, 4], [-35, -8], [-42, -23], [-53, -35], [-69, -55], [-75, -38], [-80, -12]],
+  [[-10, 36], [-8, 52], [10, 58], [25, 70], [70, 75], [110, 68], [150, 60], [170, 53], [150, 45], [135, 38], [125, 25], [110, 18], [100, 5], [80, 8], [65, 25], [45, 30], [30, 37], [15, 36]],
+  [[-18, 35], [10, 37], [35, 30], [50, 12], [42, -12], [35, -30], [20, -35], [10, -25], [0, -5], [-15, 15]],
+  [[112, -11], [130, -10], [152, -25], [145, -39], [130, -44], [114, -32]],
+  [[-52, 82], [-25, 78], [-18, 68], [-40, 58], [-54, 65]],
 ];
 
-function resolveCoord(name: string): [number, number] | null {
-  const clean = name.replace(/\s*\([A-Z0-9]+\)/g, '').trim();
-  if (PORT_COORDS[clean]) return PORT_COORDS[clean];
-  for (const [key, val] of Object.entries(PORT_COORDS)) {
-    if (clean.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(clean.toLowerCase())) {
-      return val;
-    }
-  }
-  return null;
+function resolveCoord(name: string): Coordinate | null {
+  const clean = name.replace(/\s*\([^)]*\)/g, '').trim();
+  const match = Object.keys(PORT_COORDS).find(
+    (key) => clean.toLowerCase() === key.toLowerCase(),
+  );
+  return match ? PORT_COORDS[match] : null;
+}
+
+function shortestLongitudeDelta(from: number, to: number): number {
+  return ((to - from + 540) % 360) - 180;
+}
+
+function routePath(
+  start: [number, number],
+  end: [number, number],
+  offset: number,
+): string {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.max(1, Math.hypot(dx, dy));
+  const controlX = (start[0] + end[0]) / 2 - (dy / length) * offset;
+  const controlY = (start[1] + end[1]) / 2 + (dx / length) * offset;
+  return `M ${start[0]} ${start[1]} Q ${controlX} ${controlY} ${end[0]} ${end[1]}`;
+}
+
+function routeColor(index: number): string {
+  return ['#21D4C2', '#60A5FA', '#FBBF24', '#C084FC'][index % 4];
+}
+
+function RouteOption({
+  route,
+  color,
+  selected,
+  recommended,
+  onSelect,
+}: {
+  route: RouteResult;
+  color: string;
+  selected: boolean;
+  recommended: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      key={route.route_id}
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[#21D4C2] ${
+        selected
+          ? 'border-[#21D4C2] bg-[#14263B]'
+          : 'border-[#22344A] bg-[#101F32] hover:border-[#21D4C2]/50'
+      }`}
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+          <span className="truncate text-xs font-bold text-[#F1F5F9]">{route.route_id}</span>
+        </span>
+        {recommended && (
+          <span className="rounded-full bg-[#21D4C2]/15 px-2 py-0.5 text-[10px] font-bold text-[#21D4C2]">
+            RECOMMENDED
+          </span>
+        )}
+      </div>
+      <div className="truncate text-sm font-semibold text-[#F1F5F9]" title={route.route_name}>
+        {route.route_name || route.mode}
+      </div>
+      <div className="mt-1 truncate text-xs text-[#93A4B8]" title={route.mode}>
+        {route.mode}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#22344A] pt-3">
+        <div>
+          <div className="text-[10px] uppercase text-[#93A4B8]">Freight</div>
+          <div className="mt-1 text-sm font-semibold text-[#F1F5F9]">{formatMoney(route.cost).primary}</div>
+          <div className="text-[10px] text-[#93A4B8]">{formatMoney(route.cost).secondary}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase text-[#93A4B8]">Transit</div>
+          <div className="mt-1 text-sm font-semibold text-[#F1F5F9]">
+            {route.transit_days < 1
+              ? `${Math.round(route.transit_days * 24)}h`
+              : `${route.transit_days}d`}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase text-[#93A4B8]">Feasibility</div>
+          <div className={`mt-1 text-sm font-semibold ${route.feasible ? 'text-[#34D399]' : 'text-[#FB7185]'}`}>
+            {route.feasible ? 'Feasible' : 'Infeasible'}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
 }
 
 export default function MapPage({ result: initialResult }: MapPageProps) {
   const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [selectedId, setSelectedId] = useState<string>('');
+  const [selectedId, setSelectedId] = useState('');
   const [currentResult, setCurrentResult] = useState<OptimizationResult | null>(initialResult);
   const [loading, setLoading] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
   useEffect(() => {
-    getShipments().then((s) => {
-      setShipments(s);
-      if (!currentResult && s.length > 0) {
-        setSelectedId(s[0].shipment_id);
-        fetchShipmentRoutes(s[0].shipment_id);
-      }
-    }).catch(() => {});
+    getShipments()
+      .then((items) => {
+        setShipments(items);
+        if (!currentResult && items.length > 0) {
+          setSelectedId(items[0].shipment_id);
+          void fetchShipmentRoutes(items[0].shipment_id);
+        }
+      })
+      .catch(() => setMapError('Could not load shipments. Check that the API is running.'));
   }, []);
 
   useEffect(() => {
     if (initialResult) {
       setCurrentResult(initialResult);
-      if (initialResult.recommended) {
-        setSelectedRouteId(initialResult.recommended.route_id);
-      }
+      setSelectedRouteId(initialResult.recommended?.route_id ?? null);
     }
   }, [initialResult]);
 
   const fetchShipmentRoutes = async (id: string) => {
     setLoading(true);
+    setMapError(null);
     try {
-      const res = await optimize(id, { cost: 0.40, time: 0.30, risk: 0.30 });
-      setCurrentResult(res);
-      if (res.recommended) setSelectedRouteId(res.recommended.route_id);
-    } catch {
-      // fallback
+      const response = await optimize(id, { cost: 0.4, time: 0.3, risk: 0.3 });
+      setCurrentResult(response);
+      setSelectedRouteId(response.recommended?.route_id ?? null);
+    } catch (error) {
+      setMapError(error instanceof Error ? error.message : 'Could not load routes for this shipment.');
     } finally {
       setLoading(false);
     }
@@ -165,347 +187,299 @@ export default function MapPage({ result: initialResult }: MapPageProps) {
 
   const handleSelectShipment = (id: string) => {
     setSelectedId(id);
-    fetchShipmentRoutes(id);
+    void fetchShipmentRoutes(id);
   };
 
-  const W = 880;
-  const H = 460;
+  const activeRoutes = currentResult?.all_routes ?? [];
+  const recommended = currentResult?.recommended ?? null;
+  const selectedShipment = shipments.find((shipment) => shipment.shipment_id === selectedId);
+  const originName = currentResult?.parsed_origin || selectedShipment?.origin || '';
+  const destinationName = currentResult?.parsed_destination || selectedShipment?.destination || '';
+  const originCoord = resolveCoord(originName);
+  const destinationCoord = resolveCoord(destinationName);
+  const mapReady = originCoord !== null && destinationCoord !== null;
 
-  const project = ([lon, lat]: [number, number]): [number, number] => {
-    const x = ((lon + 180) / 360) * W;
-    const y = ((90 - lat) / 180) * H;
-    return [Math.max(10, Math.min(W - 10, x)), Math.max(10, Math.min(H - 10, y))];
+  const width = 880;
+  const height = 440;
+  const centerLat = mapReady ? (originCoord[1] + destinationCoord[1]) / 2 : 0;
+  const startLon = mapReady ? originCoord[0] : 0;
+  const endLon = mapReady
+    ? startLon + shortestLongitudeDelta(startLon, destinationCoord[0])
+    : 0;
+  const centerLon = (startLon + endLon) / 2;
+  const longitudeScale = Math.cos((centerLat * Math.PI) / 180);
+  const deltaX = Math.abs((endLon - startLon) * longitudeScale);
+  const deltaY = mapReady ? Math.abs(destinationCoord[1] - originCoord[1]) : 0;
+  const compactCorridor = deltaX < 5 && deltaY < 5;
+  const minimumExtentDegrees = 8;
+  const scale = Math.min(
+    (width - 300) / Math.max(deltaX, minimumExtentDegrees),
+    (height - 190) / Math.max(deltaY, minimumExtentDegrees),
+  );
+
+  const project = ([longitude, latitude]: Coordinate): [number, number] => {
+    const adjustedLongitude = centerLon + shortestLongitudeDelta(centerLon, longitude);
+    return [
+      width / 2 + (adjustedLongitude - centerLon) * longitudeScale * scale,
+      height / 2 - (latitude - centerLat) * scale,
+    ];
   };
 
-  const routeColors = ['#21D4C2', '#38BDF8', '#FBBF24', '#A855F7'];
-
-  // Parse origin and destination
-  const activeRoutes = currentResult?.all_routes || [];
-  const recRoute = currentResult?.recommended;
+  const startPoint = mapReady ? project([startLon, originCoord[1]]) : null;
+  const endPoint = mapReady ? project([endLon, destinationCoord[1]]) : null;
+  const originLabel = originName.replace(/\s*\([^)]*\)/g, '').trim();
+  const destinationLabel = destinationName.replace(/\s*\([^)]*\)/g, '').trim();
+  const customRoute = Boolean(currentResult?.parsed_origin || currentResult?.parsed_destination);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      {/* Header with Shipment Selector */}
-      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#F1F5F9]">Global Corridor Route Map</h1>
-          <p className="text-sm text-[#93A4B8] mt-1">
-            Visual geospatial trajectories of evaluated route alternatives and intermediate maritime/intermodal hubs.
+          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#21D4C2]">
+            Route comparison
+          </div>
+          <h1 className="text-2xl font-bold text-[#F1F5F9]">Corridor map</h1>
+          <p className="mt-1 text-sm text-[#93A4B8]">
+            Compare candidate routes between the shipment endpoints.
           </p>
         </div>
-
-        <div className="flex items-center gap-3 flex-wrap">
-          <label className="text-xs text-[#93A4B8] whitespace-nowrap font-medium">Select Shipment:</label>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label htmlFor="map-shipment" className="text-xs font-medium text-[#93A4B8]">
+            Shipment
+          </label>
           <select
-            className="input-field py-1.5 px-3 text-xs w-auto min-w-[200px]"
+            id="map-shipment"
+            className="input-field min-w-[260px] py-2 text-sm"
             value={selectedId}
-            onChange={(e) => handleSelectShipment(e.target.value)}
+            onChange={(event) => handleSelectShipment(event.target.value)}
           >
-            {shipments.map((s) => (
-              <option key={s.shipment_id} value={s.shipment_id}>
-                {s.shipment_id}: {s.origin} → {s.destination}
+            {customRoute && (
+              <option value="">Current custom route: {originLabel} → {destinationLabel}</option>
+            )}
+            {shipments.map((shipment) => (
+              <option key={shipment.shipment_id} value={shipment.shipment_id}>
+                {shipment.shipment_id} · {shipment.origin} → {shipment.destination}
               </option>
             ))}
           </select>
-
-          {/* Direct Google Maps Live Route Launcher */}
-          {(() => {
-            const currentShipment = shipments.find((s) => s.shipment_id === selectedId);
-            const orig = currentShipment?.origin || currentResult?.parsed_origin || 'Hyderabad';
-            const dest = currentShipment?.destination || currentResult?.parsed_destination || 'Warangal';
-            const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(orig)}&destination=${encodeURIComponent(dest)}`;
-            return (
-              <a
-                href={gmapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#21D4C2]/15 hover:bg-[#21D4C2]/25 text-[#21D4C2] border border-[#21D4C2]/40 text-xs font-semibold transition-all shadow-sm"
-                title="Open live ground navigation & turn-by-turn traffic directly in Google Maps"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-                </svg>
-                <span>Live Google Maps</span>
-                <span className="text-[10px] opacity-75">↗</span>
-              </a>
-            );
-          })()}
         </div>
       </div>
 
+      {mapError && (
+        <div className="mb-4 rounded-lg border border-[#FB7185]/30 bg-[#FB7185]/10 px-4 py-3 text-sm text-[#FB7185]">
+          {mapError}
+        </div>
+      )}
+
       {loading ? (
-        <div className="card flex items-center justify-center py-28">
-          <div className="flex flex-col items-center gap-3">
-            <svg className="animate-spin w-8 h-8 text-[#21D4C2]" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z"/>
-            </svg>
-            <span className="text-sm text-[#93A4B8]">Rendering geospatial trade corridors…</span>
-          </div>
+        <div className="card flex min-h-[420px] items-center justify-center text-sm text-[#93A4B8]">
+          Loading corridor options…
         </div>
       ) : activeRoutes.length > 0 ? (
-        <div className="space-y-6">
-          {/* Main Map Canvas */}
-          <div className="card p-0 overflow-hidden border border-[#22344A] bg-[#07111F] shadow-2xl relative">
-            <div className="px-5 py-3.5 border-b border-[#22344A] bg-[#0A1626]/80 backdrop-blur flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#21D4C2] animate-pulse" />
-                <span className="text-xs font-semibold text-[#F1F5F9] uppercase tracking-wide">
-                  Geodesic Route Plotter
-                </span>
-                {recRoute && (
-                  <span className="text-xs text-[#21D4C2] bg-[#21D4C2]/10 border border-[#21D4C2]/30 px-2 py-0.5 rounded-full ml-2">
-                    Winner: {recRoute.route_name || recRoute.route_id}
-                  </span>
-                )}
+        <>
+          <section className="overflow-hidden rounded-2xl border border-[#22344A] bg-[#0A1626] shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#22344A] px-5 py-4">
+              <div>
+                <div className="text-sm font-semibold text-[#F1F5F9]">
+                  {originLabel || 'Origin'} <span className="mx-2 text-[#21D4C2]">→</span>{' '}
+                  {destinationLabel || 'Destination'}
+                </div>
+                <div className="mt-1 text-xs text-[#93A4B8]">
+                  {activeRoutes.length} alternatives · {currentResult?.feasible_count ?? 0} feasible
+                </div>
               </div>
-              <div className="text-xs text-[#93A4B8]">
-                Click any route card below to focus trajectory
-              </div>
+              {recommended && (
+                <div className="rounded-full border border-[#21D4C2]/30 bg-[#21D4C2]/10 px-3 py-1.5 text-xs text-[#21D4C2]">
+                  Recommended: <span className="font-semibold">{recommended.route_name || recommended.route_id}</span>
+                </div>
+              )}
             </div>
 
-            <div className="p-4 sm:p-6 overflow-x-auto">
-              <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[700px] h-auto rounded-xl bg-[#091524]">
-                <defs>
-                  <radialGradient id="oceanGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#0B1C30" />
-                    <stop offset="100%" stopColor="#06101D" />
-                  </radialGradient>
-                  <filter id="glow">
-                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                    <feMerge>
-                      <feMergeNode in="coloredBlur"/>
-                      <feMergeNode in="SourceGraphic"/>
-                    </feMerge>
-                  </filter>
-                </defs>
-
-                {/* Ocean Background */}
-                <rect width={W} height={H} fill="url(#oceanGlow)" />
-
-                {/* Latitude / Longitude Coordinate Grids */}
-                {[-60, -30, 0, 30, 60].map((lat) => {
-                  const [, y] = project([0, lat]);
-                  return (
-                    <g key={lat}>
-                      <line x1="0" y1={y} x2={W} y2={y} stroke="#1A2B40" strokeWidth="0.6" strokeDasharray="3 3" />
-                      <text x="8" y={y - 3} fill="#243850" fontSize="8" fontFamily="monospace">
-                        {lat > 0 ? `${lat}°N` : lat < 0 ? `${Math.abs(lat)}°S` : 'Equator'}
-                      </text>
-                    </g>
-                  );
-                })}
-                {[-120, -60, 0, 60, 120].map((lon) => {
-                  const [x] = project([lon, 0]);
-                  return (
-                    <g key={lon}>
-                      <line x1={x} y1="0" x2={x} y2={H} stroke="#1A2B40" strokeWidth="0.6" strokeDasharray="3 3" />
-                      <text x={x + 3} y={H - 6} fill="#243850" fontSize="8" fontFamily="monospace">
-                        {lon > 0 ? `${lon}°E` : lon < 0 ? `${Math.abs(lon)}°W` : '0°'}
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* Continents Outline */}
-                {WORLD_LANDMASSES.map((d, idx) => (
-                  <path
-                    key={idx}
-                    d={d}
-                    fill="#102238"
-                    stroke="#1D3654"
-                    strokeWidth="0.8"
-                    opacity="0.9"
-                  />
-                ))}
-
-                {/* Plot Route Curves */}
-                {activeRoutes.map((route, ri) => {
-                  const isSelected = selectedRouteId === route.route_id || (!selectedRouteId && route.route_id === recRoute?.route_id);
-                  const color = routeColors[ri % routeColors.length];
-
-                  // Resolve coordinates from intermediate hubs string or corridor
-                  const hubParts = (route.hubs || route.mode || '').split(/->|–|—|,/).map((s) => s.trim()).filter(Boolean);
-                  
-                  // Extract waypoints
-                  const waypoints: { name: string; coord: [number, number] }[] = [];
-                  hubParts.forEach((part) => {
-                    const c = resolveCoord(part);
-                    if (c) waypoints.push({ name: part, coord: c });
-                  });
-
-                  // If fewer than 2 valid waypoints, fallback to representative route
-                  if (waypoints.length < 2) {
-                    const defaultCoords: [number, number][] = [
-                      [121.5, 31.2], // Shanghai / Asia
-                      [103.8, 1.35], // Singapore
-                      [32.5, 30.0],  // Suez
-                      [4.5, 51.9]    // Rotterdam / Europe
-                    ];
-                    waypoints.push(
-                      { name: 'Origin', coord: defaultCoords[0] },
-                      { name: 'Transit Hub', coord: defaultCoords[1 + (ri % 2)] },
-                      { name: 'Destination', coord: defaultCoords[3] }
+            {mapReady && startPoint && endPoint ? (
+              <div className="bg-[#07111F] p-3 sm:p-5">
+                <svg
+                  role="img"
+                  aria-label={`Schematic route comparison map from ${originLabel} to ${destinationLabel}`}
+                  viewBox={`0 0 ${width} ${height}`}
+                  className="h-auto w-full rounded-xl border border-[#1B2D43] bg-[#091725]"
+                >
+                  <defs>
+                    <linearGradient id="map-ocean" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#0B1D2D" />
+                      <stop offset="100%" stopColor="#07111F" />
+                    </linearGradient>
+                    <filter id="map-glow" x="-100%" y="-100%" width="300%" height="300%">
+                      <feGaussianBlur stdDeviation="5" result="blur" />
+                      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                  </defs>
+                  <rect width={width} height={height} fill="url(#map-ocean)" />
+                  {Array.from({ length: 10 }, (_, index) => (
+                    <line
+                      key={`grid-x-${index}`}
+                      x1={(index + 1) * (width / 11)}
+                      y1="0"
+                      x2={(index + 1) * (width / 11)}
+                      y2={height}
+                      stroke="#193047"
+                      strokeWidth="1"
+                    />
+                  ))}
+                  {Array.from({ length: 5 }, (_, index) => (
+                    <line
+                      key={`grid-y-${index}`}
+                      x1="0"
+                      y1={(index + 1) * (height / 6)}
+                      x2={width}
+                      y2={(index + 1) * (height / 6)}
+                      stroke="#193047"
+                      strokeWidth="1"
+                    />
+                  ))}
+                  {!compactCorridor && LAND_POLYGONS.map((polygon, index) => {
+                    const path = polygon
+                      .map((point, pointIndex) => {
+                        const [x, y] = project(point);
+                        return `${pointIndex === 0 ? 'M' : 'L'} ${x} ${y}`;
+                      })
+                      .join(' ') + ' Z';
+                    return (
+                      <path
+                        key={`land-${index}`}
+                        d={path}
+                        fill="#10283A"
+                        stroke="#1D4052"
+                        strokeWidth="1.2"
+                        opacity="0.78"
+                      />
                     );
-                  }
-
-                  // Build smooth path
-                  const projectedPts = waypoints.map((w) => project(w.coord));
-                  const pathData = projectedPts.reduce((acc, pt, i) => {
-                    if (i === 0) return `M ${pt[0]} ${pt[1]}`;
-                    const prev = projectedPts[i - 1];
-                    // Curved quadratic bezier arc
-                    const cx = (prev[0] + pt[0]) / 2;
-                    const cy = Math.min(prev[1], pt[1]) - (30 * ((ri % 2 === 0) ? 1 : -1));
-                    return `${acc} Q ${cx} ${cy} ${pt[0]} ${pt[1]}`;
-                  }, '');
-
-                  return (
-                    <g
-                      key={route.route_id}
-                      onClick={() => setSelectedRouteId(route.route_id)}
-                      className="cursor-pointer"
-                    >
-                      {/* Glow effect on selected route */}
-                      {isSelected && (
+                  })}
+                  {activeRoutes.map((route, index) => {
+                    const isSelected = (selectedRouteId ?? recommended?.route_id) === route.route_id;
+                    const path = routePath(startPoint, endPoint, (index - (activeRoutes.length - 1) / 2) * 23);
+                    const color = routeColor(index);
+                    return (
+                      <g
+                        key={route.route_id}
+                        className="cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Highlight ${route.route_name || route.route_id}`}
+                        onClick={() => setSelectedRouteId(route.route_id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedRouteId(route.route_id);
+                          }
+                        }}
+                      >
+                        {isSelected && (
+                          <path
+                            d={path}
+                            fill="none"
+                            stroke={color}
+                            strokeWidth="12"
+                            opacity="0.18"
+                            filter="url(#map-glow)"
+                          />
+                        )}
                         <path
-                          d={pathData}
+                          d={path}
                           fill="none"
                           stroke={color}
-                          strokeWidth="6"
-                          opacity="0.3"
-                          filter="url(#glow)"
+                          strokeWidth={isSelected ? 4 : 2}
+                          strokeDasharray={route.feasible ? undefined : '7 6'}
+                          opacity={isSelected ? 1 : 0.55}
                         />
-                      )}
-
-                      {/* Main route stroke */}
-                      <path
-                        d={pathData}
-                        fill="none"
-                        stroke={color}
-                        strokeWidth={isSelected ? 3.0 : 1.5}
-                        strokeDasharray={route.feasible ? (isSelected ? 'none' : '4 2') : '6 4'}
-                        opacity={isSelected ? 1.0 : 0.45}
-                        className="transition-all duration-300"
-                      />
-
-                      {/* Waypoint Nodes */}
-                      {projectedPts.map((pt, pi) => (
-                        <g key={pi}>
-                          <circle
-                            cx={pt[0]}
-                            cy={pt[1]}
-                            r={isSelected ? 5 : 3.5}
-                            fill={color}
+                      </g>
+                    );
+                  })}
+                  {[{ point: startPoint, label: originLabel, anchor: 'start' as const },
+                    { point: endPoint, label: destinationLabel, anchor: 'end' as const }].map(({ point, label, anchor }) => {
+                      const labelOffset = compactCorridor
+                        ? (anchor === 'start' ? 34 : -29)
+                        : -13;
+                      const labelY = point[1] + labelOffset;
+                      return (
+                        <g key={label}>
+                          <circle cx={point[0]} cy={point[1]} r="12" fill="#21D4C2" opacity="0.16" />
+                          <circle cx={point[0]} cy={point[1]} r="5.5" fill="#21D4C2" stroke="#D8FFF9" strokeWidth="2" />
+                          <text
+                            x={point[0] + (anchor === 'start' ? 14 : -14)}
+                            y={labelY}
+                            textAnchor={anchor}
+                            fill="#F1F5F9"
+                            fontSize="13"
+                            fontWeight="700"
+                            paintOrder="stroke"
                             stroke="#07111F"
-                            strokeWidth="1.5"
-                            opacity={isSelected ? 1.0 : 0.6}
-                          />
-                          {isSelected && (
-                            <text
-                              x={pt[0]}
-                              y={pt[1] - 8}
-                              fill="#F1F5F9"
-                              fontSize="9"
-                              fontWeight="600"
-                              textAnchor="middle"
-                              className="pointer-events-none drop-shadow"
-                            >
-                              {waypoints[pi]?.name?.split(' ')[0]}
-                            </text>
-                          )}
+                            strokeWidth="4"
+                          >
+                            {label}
+                          </text>
+                          <text
+                            x={point[0] + (anchor === 'start' ? 14 : -14)}
+                            y={labelY + 18}
+                            textAnchor={anchor}
+                            fill="#21D4C2"
+                            fontSize="9"
+                            letterSpacing="1.5"
+                          >
+                            {anchor === 'start' ? 'ORIGIN' : 'DESTINATION'}
+                          </text>
                         </g>
-                      ))}
-                    </g>
-                  );
-                })}
-              </svg>
+                      );
+                    })}
+                  <text x="20" y="28" fill="#7792A8" fontSize="10" letterSpacing="1.4">
+                    ENDPOINT-FOCUSED VIEW
+                  </text>
+                </svg>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#93A4B8]">
+                  <span>Colors identify alternatives; select a card to highlight its schematic corridor.</span>
+                  <span>Illustrative comparison only—not a live navigation or carrier route.</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex min-h-64 flex-col items-center justify-center gap-2 bg-[#07111F] px-6 text-center">
+                <div className="text-sm font-semibold text-[#F1F5F9]">Map coordinates are unavailable</div>
+                <p className="max-w-lg text-xs leading-5 text-[#93A4B8]">
+                  The route alternatives are still listed below. Add coordinates for both locations to display their corridor; no substitute route is drawn.
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className="mt-5">
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-[#F1F5F9]">Candidate routes</h2>
+                <p className="mt-1 text-xs text-[#93A4B8]">Select an option to highlight it on the corridor map.</p>
+              </div>
+              <div className="text-xs text-[#93A4B8]">
+                {activeRoutes.length > 0 && currentResult?.feasible_count === 0
+                  ? 'All candidates violate at least one constraint.'
+                  : `${currentResult?.feasible_count ?? 0} of ${activeRoutes.length} meet the active constraints.`}
+              </div>
             </div>
-          </div>
-
-          {/* Interactive Route Cards */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-[#93A4B8] uppercase tracking-wider">
-                Corridor Trajectories ({activeRoutes.length} Options)
-              </span>
-              <span className="text-xs text-[#21D4C2]">
-                Highlighting: {selectedRouteId || recRoute?.route_id || 'All'}
-              </span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {activeRoutes.map((route, index) => (
+                <RouteOption
+                  key={route.route_id}
+                  route={route}
+                  color={routeColor(index)}
+                  selected={(selectedRouteId ?? recommended?.route_id) === route.route_id}
+                  recommended={route.route_id === recommended?.route_id}
+                  onSelect={() => setSelectedRouteId(route.route_id)}
+                />
+              ))}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {activeRoutes.map((r, i) => {
-                const color = routeColors[i % routeColors.length];
-                const isSelected = selectedRouteId === r.route_id;
-                const isRec = r.route_id === recRoute?.route_id;
-
-                return (
-                  <div
-                    key={r.route_id}
-                    onClick={() => setSelectedRouteId(r.route_id)}
-                    className={`card cursor-pointer transition-all duration-200 border ${
-                      isSelected
-                        ? 'border-[#21D4C2] bg-[#14263B] shadow-[0_0_15px_#21D4C220]'
-                        : 'border-[#22344A] hover:border-[#21D4C2]/40 bg-[#101F32]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-3 h-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: color }}
-                        />
-                        <span className="text-xs font-bold text-[#F1F5F9]">{r.route_id}</span>
-                      </div>
-                      {isRec && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#21D4C2] text-[#07111F]">
-                          ★ BEST
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="text-xs font-semibold text-[#F1F5F9] mb-1 line-clamp-1" title={r.route_name}>
-                      {r.route_name || r.mode}
-                    </div>
-                    <div className="text-[11px] text-[#93A4B8] mb-3 line-clamp-1" title={r.hubs}>
-                      {r.hubs || r.mode}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-1 pt-2 border-t border-[#22344A] text-center">
-                      <div>
-                        <div className="text-[9px] text-[#93A4B8] uppercase">Cost</div>
-                        <div className="text-xs font-semibold text-[#F1F5F9]">${r.cost?.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</div>
-                        <div className="text-[9px] text-[#21D4C2]">≈₹{Math.round(r.cost * 84).toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] text-[#93A4B8] uppercase">Transit</div>
-                        <div className="text-xs font-semibold text-[#F1F5F9]">{r.transit_days < 1.0 ? `${Math.round(r.transit_days * 24 * 10) / 10}h` : `${r.transit_days}d`}</div>
-                        <div className="text-[9px] text-[#93A4B8]">{r.transit_days < 1.0 ? `(${r.transit_days}d)` : `(${Math.round(r.transit_days*24)}h)`}</div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] text-[#93A4B8] uppercase">Status</div>
-                        <div className={`text-xs font-semibold ${r.feasible ? 'text-[#34D399]' : 'text-[#FB7185]'}`}>
-                          {r.feasible ? '✓ OK' : '✗ Viol'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+          </section>
+        </>
       ) : (
-        <div className="card text-center py-24 space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-[#21D4C2]/10 border border-[#21D4C2]/20 flex items-center justify-center mx-auto text-[#21D4C2]">
-            <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" stroke="currentColor" strokeWidth="2"/>
-            </svg>
-          </div>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">No Route Data Available</h3>
-          <p className="text-xs text-[#93A4B8] max-w-md mx-auto">
-            Select a benchmark shipment from the dropdown above or run an optimization to view route trajectories on the map.
+        <div className="card py-20 text-center">
+          <h2 className="text-base font-semibold text-[#F1F5F9]">No route options to display</h2>
+          <p className="mt-2 text-sm text-[#93A4B8]">
+            Choose a shipment once the API is available, or optimize a custom corridor first.
           </p>
         </div>
       )}

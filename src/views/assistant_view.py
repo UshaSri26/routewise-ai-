@@ -9,6 +9,7 @@ import pandas as pd
 from src.ui_theme import PRIMARY_TEAL, TEXT_PRIMARY, TEXT_SECONDARY, BORDER_COLOR, BG_CARD
 from src.optimizer import RouteOptimizer, WeightsConfig, HardConstraints
 from src.explanations import LLMExplainer, RuleBasedExplainer
+from src.money import format_money
 
 
 def handle_grounded_intent(query: str, opt_result, shipment_df: pd.DataFrame) -> str:
@@ -32,11 +33,11 @@ def handle_grounded_intent(query: str, opt_result, shipment_df: pd.DataFrame) ->
             time_diff = r1.transit_time_days - r2.transit_time_days
             return (
                 f"**Lowest-Cost Feasible Route Comparison:**\n\n"
-                f"1. **{r1.route_name}** (`{r1.route_id}`): **${r1.cost_usd:,.2f}** | {r1.transit_time_days:.1f} days | Delay Risk: {r1.delay_probability*100:.1f}%\n"
-                f"2. **{r2.route_name}** (`{r2.route_id}`): **${r2.cost_usd:,.2f}** | {r2.transit_time_days:.1f} days | Delay Risk: {r2.delay_probability*100:.1f}%\n\n"
-                f"**Trade-off:** `{r1.route_id}` saves **${diff:,.2f}**, but takes **{time_diff:+.1f} days** relative to `{r2.route_id}`."
+                f"1. **{r1.route_name}** (`{r1.route_id}`): **{format_money(r1.cost_usd)}** | {r1.transit_time_days:.1f} days | Delay Risk: {r1.delay_probability*100:.1f}%\n"
+                f"2. **{r2.route_name}** (`{r2.route_id}`): **{format_money(r2.cost_usd)}** | {r2.transit_time_days:.1f} days | Delay Risk: {r2.delay_probability*100:.1f}%\n\n"
+                f"**Trade-off:** `{r1.route_id}` saves **{format_money(diff)}**, but takes **{time_diff:+.1f} days** relative to `{r2.route_id}`."
             )
-        return f"Only one feasible route available: `{r1.route_id}` at **${r1.cost_usd:,.2f}**."
+        return f"Only one feasible route available: `{r1.route_id}` at **{format_money(r1.cost_usd)}**."
 
     if "speed" in q_lower or "delivery speed" in q_lower or "faster" in q_lower:
         fast_weights = WeightsConfig(cost=0.15, time=0.70, risk=0.15)
@@ -46,9 +47,9 @@ def handle_grounded_intent(query: str, opt_result, shipment_df: pd.DataFrame) ->
             f"**Impact of Prioritizing Delivery Speed (Time Weight = 70%):**\n\n"
             f"Under an emergency speed priority, the optimal choice shifts to **{w_fast.route_name}** (`{w_fast.route_id}`).\n"
             f"- **Transit Time:** {w_fast.transit_time_days:.1f} days (compared to {winner.transit_time_days:.1f} days for current baseline)\n"
-            f"- **Freight Cost:** ${w_fast.cost_usd:,.2f} (delta: ${w_fast.cost_usd - winner.cost_usd:+,.2f})\n"
+            f"- **Freight Cost:** {format_money(w_fast.cost_usd)} (delta vs current: {format_money(abs(w_fast.cost_usd - winner.cost_usd))})\n"
             f"- **Score:** `{w_fast.total_score:.4f}`\n\n"
-            f"*Summary:* Switching to time-critical saves **{winner.transit_time_days - w_fast.transit_time_days:.1f} days** at a freight cost delta of **${w_fast.cost_usd - winner.cost_usd:+,.2f}**."
+            f"*Summary:* Switching to time-critical saves **{winner.transit_time_days - w_fast.transit_time_days:.1f} days** at a freight cost delta of **{format_money(abs(w_fast.cost_usd - winner.cost_usd))}**."
         )
 
     if "violate" in q_lower or "constraint" in q_lower or "infeasible" in q_lower:

@@ -10,8 +10,8 @@ import pandas as pd
 
 from src.freight_costs import CORRIDOR_DISTANCE_KM, india_domestic_quotes, international_lcl_quotes
 
-# Practical SME corridors first (India domestic carton/PTL), then global LCL lanes
-TRADE_LANES = [
+# India parcel lanes first so the demo catalog is SME-practical, then small export samples
+INDIA_LANES = [
     {"origin": "Hyderabad", "destination": "Warangal", "corridor": "India Domestic", "km": 155},
     {"origin": "Hyderabad", "destination": "Visakhapatnam", "corridor": "India Domestic", "km": 620},
     {"origin": "Chennai", "destination": "Bengaluru", "corridor": "India Domestic", "km": 350},
@@ -20,6 +20,19 @@ TRADE_LANES = [
     {"origin": "Bengaluru", "destination": "Hyderabad", "corridor": "India Domestic", "km": 575},
     {"origin": "Ahmedabad", "destination": "Mumbai", "corridor": "India Domestic", "km": 530},
     {"origin": "Kolkata", "destination": "Chennai", "corridor": "India Domestic", "km": 1670},
+    {"origin": "Hyderabad", "destination": "Vijayawada", "corridor": "India Domestic", "km": 275},
+    {"origin": "Delhi", "destination": "Jaipur", "corridor": "India Domestic", "km": 280},
+    {"origin": "Bengaluru", "destination": "Chennai", "corridor": "India Domestic", "km": 350},
+    {"origin": "Mumbai", "destination": "Pune", "corridor": "India Domestic", "km": 150},
+    {"origin": "Hyderabad", "destination": "Bengaluru", "corridor": "India Domestic", "km": 575},
+    {"origin": "Chennai", "destination": "Hyderabad", "corridor": "India Domestic", "km": 630},
+    {"origin": "Surat", "destination": "Mumbai", "corridor": "India Domestic", "km": 280},
+    {"origin": "Nagpur", "destination": "Hyderabad", "corridor": "India Domestic", "km": 500},
+    {"origin": "Kochi", "destination": "Bengaluru", "corridor": "India Domestic", "km": 550},
+    {"origin": "Lucknow", "destination": "Delhi", "corridor": "India Domestic", "km": 550},
+]
+
+TRADE_LANES = INDIA_LANES + [
     {"origin": "Shanghai (CNSHA)", "destination": "Rotterdam (NLRTM)", "corridor": "Asia-Europe"},
     {"origin": "Ningbo (CNNGB)", "destination": "Los Angeles (USLAX)", "corridor": "Trans-Pacific"},
     {"origin": "Mumbai (INBOM)", "destination": "Hamburg (DEHAM)", "corridor": "South Asia-Europe"},
@@ -52,14 +65,21 @@ TRADE_LANES = [
     {"origin": "Karachi (PKKHI)", "destination": "Piraeus (GRPIR)", "corridor": "South Asia-Med"}
 ]
 
-CARGO_TYPES = [
-    {"type": "High-Value Electronics", "urgency": "High", "time_sensitivity": 0.8, "risk_sensitivity": 0.9},
-    {"type": "Pharmaceuticals (Cold Chain)", "urgency": "Critical", "time_sensitivity": 0.9, "risk_sensitivity": 0.95},
-    {"type": "Industrial Machinery", "urgency": "Medium", "time_sensitivity": 0.4, "risk_sensitivity": 0.5},
-    {"type": "Apparel & Fast Fashion", "urgency": "High", "time_sensitivity": 0.7, "risk_sensitivity": 0.4},
-    {"type": "Raw Commodities", "urgency": "Low", "time_sensitivity": 0.2, "risk_sensitivity": 0.3},
-    {"type": "Automotive Parts (JIT)", "urgency": "Critical", "time_sensitivity": 0.85, "risk_sensitivity": 0.7}
+INDIA_CARGO_TYPES = [
+    {"type": "Commercial carton (~10 kg)", "urgency": "Medium", "time_sensitivity": 0.4, "risk_sensitivity": 0.3},
+    {"type": "Apparel / samples", "urgency": "High", "time_sensitivity": 0.7, "risk_sensitivity": 0.4},
+    {"type": "Electronics accessories", "urgency": "High", "time_sensitivity": 0.8, "risk_sensitivity": 0.6},
+    {"type": "Pharma samples", "urgency": "Critical", "time_sensitivity": 0.85, "risk_sensitivity": 0.7},
 ]
+
+INTL_CARGO_TYPES = [
+    {"type": "Export samples (~15 kg)", "urgency": "High", "time_sensitivity": 0.7, "risk_sensitivity": 0.5},
+    {"type": "Apparel samples (0.1 CBM)", "urgency": "High", "time_sensitivity": 0.75, "risk_sensitivity": 0.4},
+    {"type": "Spare parts parcel", "urgency": "Critical", "time_sensitivity": 0.85, "risk_sensitivity": 0.6},
+    {"type": "Documents & product samples", "urgency": "Medium", "time_sensitivity": 0.5, "risk_sensitivity": 0.3},
+]
+
+CARGO_TYPES = INDIA_CARGO_TYPES + INTL_CARGO_TYPES
 
 # Legacy ocean archetype labels kept for international LCL quote mapping
 INTL_QUOTE_KEYS = ("ocean", "express", "resilient", "air")
@@ -76,9 +96,10 @@ def generate_shipments_dataset(num_shipments: int = 30, seed: int = 42) -> pd.Da
 
     for i in range(num_shipments):
         lane = TRADE_LANES[i % len(TRADE_LANES)]
-        cargo = CARGO_TYPES[i % len(CARGO_TYPES)]
         shipment_id = f"SHP-{i+1:03d}"
         is_india = lane["corridor"] == "India Domestic"
+        cargo_pool = INDIA_CARGO_TYPES if is_india else INTL_CARGO_TYPES
+        cargo = cargo_pool[i % len(cargo_pool)]
 
         if is_india:
             quotes = india_domestic_quotes(float(lane.get("km", 450)))

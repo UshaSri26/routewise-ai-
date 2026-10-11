@@ -22,8 +22,9 @@ def test_dataset_value_ranges():
     """Verify numeric values fall within expected real-world domains."""
     df = generate_shipments_dataset(num_shipments=30, seed=42)
     
-    # Costs must be positive
+    # Costs must be positive and parcel-scale, not container freight
     assert (df["cost_usd"] > 0).all()
+    assert df["cost_usd"].max() < 500
     
     # Transit days must be positive
     assert (df["transit_time_days"] > 0).all()

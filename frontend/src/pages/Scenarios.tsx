@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getShipments, getScenarios } from '../api';
 import type { Shipment, ScenarioResult } from '../types';
+import { formatMoney } from '../money';
 
 interface ScenariosProps {
   selectedShipment: Shipment | null;
@@ -142,7 +143,7 @@ export default function Scenarios({ selectedShipment }: ScenariosProps) {
                         <div>
                           <div className="label mb-1">Cost</div>
                           <div className="text-sm font-semibold text-[#F1F5F9]">
-                            ${s.cost?.toLocaleString() ?? '—'}
+                            {s.cost != null ? formatMoney(s.cost).primary : '—'}
                           </div>
                         </div>
                         <div>
@@ -209,7 +210,7 @@ export default function Scenarios({ selectedShipment }: ScenariosProps) {
                           <td className="px-4 py-3 text-[#93A4B8] max-w-[160px] truncate" title={s.recommended_route}>
                             {s.recommended_route}
                           </td>
-                          <td className="px-4 py-3 text-[#F1F5F9]">${s.cost?.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[#F1F5F9]">{s.cost != null ? formatMoney(s.cost).primary : '—'}</td>
                           <td className="px-4 py-3 text-[#F1F5F9]">{s.transit_days}d</td>
                           <td className="px-4 py-3 font-semibold" style={{ color: profile.color }}>
                             {s.score !== undefined ? Math.round((1 - s.score) * 100) : '—'}/100

@@ -77,6 +77,9 @@ export default function Optimize({ initialResult, initialShipment, onResult }: O
         <p className="text-sm text-[#93A4B8] mt-1">
           Select a shipment, configure priorities, and run the MCDA optimizer.
         </p>
+        <p className="text-xs text-[#93A4B8] mt-2">
+          Costs are planning estimates for a 10 kg domestic carton or 15 kg / 0.1 CBM export sample—not live carrier quotes. Duties and taxes are excluded.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -148,7 +151,7 @@ export default function Optimize({ initialResult, initialShipment, onResult }: O
               <input
                 type="number"
                 className="input-field"
-                placeholder="e.g. 5000"
+                placeholder="e.g. 12 (domestic) or 400 (export)"
                 value={constraints.max_budget ?? ''}
                 onChange={(e) => setConstraints((p) => ({ ...p, max_budget: e.target.value ? +e.target.value : undefined }))}
               />

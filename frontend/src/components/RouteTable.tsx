@@ -1,4 +1,5 @@
 import type { RouteResult } from '../types';
+import { formatMoney } from '../money';
 
 interface RouteTableProps {
   routes: RouteResult[];
@@ -42,8 +43,8 @@ export default function RouteTable({ routes, recommendedId }: RouteTableProps) {
                   {r.hubs || r.mode}
                 </td>
                 <td className="px-4 py-3 text-[#F1F5F9] whitespace-nowrap">
-                  <div>${r.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                  <div className="text-[10px] text-[#21D4C2]">≈ ₹{Math.round(r.cost * 84).toLocaleString()}</div>
+                  <div>{formatMoney(r.cost).primary}</div>
+                  <div className="text-[10px] text-[#21D4C2]">{formatMoney(r.cost).secondary}</div>
                 </td>
                 <td className="px-4 py-3 text-[#F1F5F9] whitespace-nowrap">
                   <div>{r.transit_days < 1.0 ? `${Math.round(r.transit_days * 24 * 10) / 10} hrs` : `${r.transit_days}d`}</div>

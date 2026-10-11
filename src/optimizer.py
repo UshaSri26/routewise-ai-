@@ -91,7 +91,7 @@ class RouteOptimizer:
     """
 
     EPSILON = 1e-6
-    COST_PER_DELAY_DAY_DEFAULT = 150.0  # Assumed demurrage / inventory holding cost per day
+    COST_PER_DELAY_DAY_DEFAULT = 4.0  # Holding cost per delay day for a 10–15 kg parcel
 
     # Sub-weights for composite risk calculation (sum to 1.0)
     RISK_WEIGHT_DELAY = 0.40

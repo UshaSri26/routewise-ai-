@@ -26,6 +26,7 @@ from src.views.optimizer_view import render_optimizer
 from src.views.scenario_view import render_scenarios
 from src.views.assistant_view import render_assistant
 from src.views.methodology_view import render_methodology
+from src.money import format_money
 
 # Streamlit Page Config
 st.set_page_config(
@@ -131,6 +132,10 @@ with col_status:
             st.rerun()
 
 st.markdown(f"<hr style='border:none; border-top:1px solid {pal['border']}; margin:10px 0 20px 0;'/>", unsafe_allow_html=True)
+st.caption(
+    "Freight costs are planning estimates for a 10 kg domestic carton or 15 kg / "
+    "0.1 CBM export sample—not live carrier quotes. Customs duties and taxes are excluded."
+)
 
 
 # --- 2. ROUTE DETERMINATION & PAGE RENDERING ---
@@ -149,7 +154,7 @@ elif active_tab == "Methodology":
     render_methodology()
 
 elif active_tab == "Map":
-    st.subheader("Global Maritime & Multimodal Route Visualizer")
+    st.subheader("Endpoint Corridor Comparison (Illustrative)")
     active_shp = st.session_state["custom_corridor_df"] if st.session_state["custom_corridor_df"] is not None else df_fleet[df_fleet["shipment_id"] == st.session_state["selected_shipment_id"]]
     o_name = active_shp["origin"].iloc[0]
     d_name = active_shp["destination"].iloc[0]
@@ -336,7 +341,7 @@ else:
                 </div>
                 <div class="rw-stat-row">
                     <div class="rw-stat-item">
-                        <div class="rw-stat-val" style="color:{pal['text_primary']};">${winner.cost_usd:,.0f}</div>
+                        <div class="rw-stat-val" style="color:{pal['text_primary']};">{format_money(winner.cost_usd)}</div>
                         <div class="rw-stat-lbl">Cost</div>
                     </div>
                     <div class="rw-stat-item">
@@ -364,7 +369,7 @@ else:
         <div class="rw-box" style="padding:14px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <span style="font-size:0.88rem; font-weight:700; color:{pal['text_primary']};">🗺️ Global Corridor Map</span>
-                <span style="font-size:0.75rem; color:{pal['primary']};">Interactive Waypoints</span>
+                <span style="font-size:0.75rem; color:{pal['primary']};">Schematic comparison</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -388,7 +393,7 @@ else:
             risk_label = "Low" if r.composite_risk < 0.25 else ("Medium" if r.composite_risk < 0.45 else "High")
             alt_rows.append({
                 "Route": r.route_id.split("-")[-1],
-                "Cost ($)": f"${r.cost_usd:,.0f}",
+                "Cost": format_money(r.cost_usd),
                 "Days": f"{r.transit_time_days:.1f}d",
                 "Delay %": f"{r.delay_probability*100:.0f}%",
                 "Risk": risk_label,

@@ -95,7 +95,7 @@ def render_overview(df_fleet: pd.DataFrame, on_navigate_optimizer):
         color="transport_mode",
         hover_name="route_name",
         hover_data=["origin", "destination", "cost_usd", "transit_time_days", "carrier"],
-        labels={"transit_time_days": "Transit Time (Days)", "cost_usd": "Cost ($ USD)", "transport_mode": "Transport Mode"},
+        labels={"transit_time_days": "Transit Time (Days)", "cost_usd": "Cost (USD)", "transport_mode": "Transport Mode"},
         color_discrete_map={
             "Ocean": "#3B82F6",
             "Ocean-Express": PRIMARY_TEAL,
